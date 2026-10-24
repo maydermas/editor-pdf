@@ -90,9 +90,17 @@ export function getTextRuns(page: Page): Promise<TextRun[]> {
 }
 
 /** Caja que cubre un texto existente (con un pequeño margen para tapar del todo las letras). */
-export function runBox(r: TextRun) {
+export function runBox(r: TextRun, others: TextRun[] = []) {
   const pad = Math.max(0.6, r.fontSize * 0.06);
-  return { x: r.x - pad, y: r.baseline - r.fontSize * 0.92 - pad, w: r.width + pad * 2, h: r.fontSize * 1.18 + pad * 2 };
+  let top = r.baseline - r.fontSize * 0.92 - pad;
+  let bottom = r.baseline + r.fontSize * 0.26 + pad;
+  // Con interlineado justo, la caja no debe comerse las letras de la línea de arriba ni la de abajo.
+  for (const o of others) {
+    if (o === r || o.x > r.x + r.width || o.x + o.width < r.x) continue;
+    if (o.baseline > r.baseline + r.fontSize * 0.5) bottom = Math.min(bottom, o.baseline - o.fontSize * 0.78);
+    else if (o.baseline < r.baseline - r.fontSize * 0.5) top = Math.max(top, o.baseline + o.fontSize * 0.22);
+  }
+  return { x: r.x - pad, y: top, w: r.width + pad * 2, h: Math.max(r.fontSize * 0.9, bottom - top) };
 }
 
 /**

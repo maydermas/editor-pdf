@@ -83,7 +83,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
   /** Tapa el texto original con su color de fondo y pone encima una copia editable con su mismo formato. */
   const editRun = async (run: TextRun) => {
     if (api.editingId) api.setEditing(null);
-    const box = runBox(run);
+    const box = runBox(run, runs);
     const canvas = pageRasterReady(page) ?? (await pageRaster(page).catch(() => null));
     const { bg, fg } = canvas ? sampleColors(canvas, page, box) : { bg: '#ffffff', fg: '#111111' };
     const coverId = uid('cover');
@@ -349,13 +349,32 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
     }
   }, [editing?.id]);
 
-  const finishEditing = () => {
-    if (editing?.type === 'text' && !editing.text.trim()) {
-      api.update(page.id, (anns) => anns.filter((a) => a.id !== editing.id), false);
-      api.select(page.id, null);
+  /**
+   * Al dejar de editar un texto (por cualquier motivo: tocar fuera, abrir otro, cambiar de herramienta):
+   * si es un texto del PDF que no se ha cambiado, se quita la tapa y se deja el original tal cual;
+   * si se ha quedado vacío, se borra (en un texto del PDF, la tapa queda y eso es «borrar la línea»).
+   */
+  const settleText = (id: string) => {
+    const a = page.annotations.find((x) => x.id === id);
+    if (a?.type !== 'text') return;
+    const source = a.coverId ? runs.find((r) => r.key === a.sourceKey) : null;
+    if (source && a.text === source.text) {
+      api.update(page.id, (anns) => anns.filter((x) => x.id !== a.id && x.id !== a.coverId), false);
+      if (selectedId === a.id) api.select(page.id, null);
+    } else if (!a.text.trim()) {
+      api.update(page.id, (anns) => anns.filter((x) => x.id !== a.id), false);
+      if (selectedId === a.id) api.select(page.id, null);
     }
-    api.setEditing(null);
   };
+  const prevEditing = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevEditing.current;
+    prevEditing.current = api.editingId;
+    if (prev && prev !== api.editingId) settleText(prev);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api.editingId]);
+
+  const finishEditing = () => api.setEditing(null);
 
   const interactiveAnns = tool === 'select' || tool === 'text';
   const cursor =

@@ -42,6 +42,14 @@ try {
   const fontSelect = page.locator('.propbar select').last();
   check('la letra por defecto pasa a ser la del documento', (await fontSelect.inputValue()) === 'calibri', await fontSelect.inputValue());
 
+  // Abrir líneas sin cambiar nada no debe tocar el documento.
+  await page.locator('.viewer .text-run').nth(1).click();
+  await page.waitForSelector('.text-editor');
+  await page.locator('.viewer .text-run').nth(0).click();
+  await page.mouse.click(700, 700);
+  await page.waitForTimeout(300);
+  check('abrir líneas sin cambiarlas no modifica el documento', (await page.locator('.viewer [data-ann]').count()) === 0, `${await page.locator('.viewer [data-ann]').count()} elementos`);
+
   await page.locator('.viewer .text-run').first().click();
   await page.waitForSelector('.text-editor');
   const ff = await page.locator('.text-editor').evaluate((el) => `${getComputedStyle(el).fontFamily} ${getComputedStyle(el).fontWeight}`);
