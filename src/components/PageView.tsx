@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { Annotation, BoxAnn, Page, TextAnn, Tool, ToolStyle } from '../types';
 import { PageCanvas } from './PageCanvas';
 import { AnnotationShape } from './AnnotationSvg';
-import { BASELINE, FONT_CSS, LINE_HEIGHT, bbox, canResize, measureText, resizeTo, today, translate } from '../lib/annotations';
-import { charX, fitScale, getTextRuns, pageRaster, pageRasterReady, runBox, sampleColors, type TextRun } from '../lib/textRuns';
+import { BASELINE, FONT_CSS, LINE_HEIGHT, bbox, canResize, measureAscent, measureText, resizeTo, today, translate } from '../lib/annotations';
+import { charX, fitScale, getTextRuns, inkAscent, pageRaster, pageRasterReady, runBox, sampleColors, type TextRun } from '../lib/textRuns';
 import { uid } from '../lib/id';
 import { fontReady, loadFont } from '../lib/fonts';
 
@@ -107,7 +107,23 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       sourceKey: run.key,
     };
     // Con la letra ya cargada se mide si la original es más ancha o estrecha (frecuente en DNI e importes).
-    if (fontReady(run.font)) text.scaleX = fitScale(run, (s) => measureText(text, s));
+    if (fontReady(run.font)) {
+      // Misma altura que la letra que se ve en el PDF (los DNI e importes a veces van en una letra más alta).
+      const ink = canvas ? inkAscent(canvas, page, run, runs, { bg, fg }) : null;
+      const ours = measureAscent(text, run.text);
+      if (ink && ours > 0) {
+        const k = ink / ours;
+        if (Math.abs(k - 1) > 0.08 && k > 0.75 && k < 1.45) {
+          text.fontSize = Math.round(run.fontSize * k * 10) / 10;
+          text.y = run.baseline - text.fontSize * BASELINE;
+        }
+        // Que la tapa cubra toda la letra original aunque sea más alta de lo que dice el PDF.
+        const top = Math.min(box.y, run.baseline - ink - Math.max(0.6, run.fontSize * 0.06));
+        box.h += box.y - top;
+        box.y = top;
+      }
+      text.scaleX = fitScale(run, (s) => measureText(text, s));
+    }
     api.update(
       page.id,
       (anns) => [...anns.filter((a) => !('sourceKey' in a && a.sourceKey === run.key)), { id: coverId, type: 'whiteout', ...box, color: bg, width: 0, sourceKey: run.key }, text],

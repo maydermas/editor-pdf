@@ -145,6 +145,58 @@ export function runBox(r: TextRun, others: TextRun[] = []) {
 }
 
 /**
+ * Lo que sube de verdad la tinta de una línea sobre su línea base, medido en la página pintada.
+ * Sirve para igualar la altura cuando la letra del PDF es más alta que la parecida o el PDF
+ * declara un tamaño que no es el que se ve. Devuelve null si no se puede medir.
+ */
+export function inkAscent(canvas: HTMLCanvasElement, page: Page, r: TextRun, others: TextRun[], colors: { bg: string; fg: string }): number | null {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx || !canvas.width) return null;
+  // Se busca hasta 1,5 veces el cuerpo hacia arriba, sin llegar a la línea de encima.
+  let top = r.baseline - r.fontSize * 1.5;
+  for (const o of others) {
+    if (o === r || o.x > r.x + r.width || o.x + o.width < r.x) continue;
+    if (o.baseline < r.baseline - r.fontSize * 0.5) top = Math.max(top, o.baseline + o.fontSize * 0.22);
+  }
+  const sx = canvas.width / page.width;
+  const sy = canvas.height / page.height;
+  const x0 = Math.max(0, Math.floor(r.x * sx));
+  const w = Math.min(canvas.width - x0, Math.ceil(r.width * sx));
+  const y0 = Math.max(0, Math.floor(top * sy));
+  const yBase = Math.min(canvas.height, Math.round(r.baseline * sy));
+  const h = yBase - y0;
+  if (w < 2 || h < 2) return null;
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(x0, y0, w, h).data;
+  } catch {
+    return null;
+  }
+  const rgbOf = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const bg = rgbOf(colors.bg);
+  const fg = rgbOf(colors.fg);
+  const full = Math.abs(fg[0] - bg[0]) + Math.abs(fg[1] - bg[1]) + Math.abs(fg[2] - bg[2]);
+  if (full < 60) return null;
+  for (let y = 0; y < h; y++) {
+    let ink = 0;
+    let most = 0;
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const cover = Math.min(1, (Math.abs(data[i] - bg[0]) + Math.abs(data[i + 1] - bg[1]) + Math.abs(data[i + 2] - bg[2])) / full);
+      if (cover > 0.15) ink++;
+      most = Math.max(most, cover);
+    }
+    // Dos píxeles como mínimo, para no hacer caso de una mota suelta.
+    if (ink < 2) continue;
+    // Si ya hay tinta en la primera fila, la letra sigue más arriba y la medida no vale.
+    if (y === 0) return null;
+    // El suavizado del borde dice qué parte de esta fila cubre la letra: precisión por debajo del píxel.
+    return (yBase - y0 - y - 1 + most) / sy;
+  }
+  return null;
+}
+
+/**
  * Toma del lienzo ya pintado el color de fondo (el más repetido en el borde de la caja)
  * y el del texto (el que más contrasta con el fondo dentro de la caja).
  */
