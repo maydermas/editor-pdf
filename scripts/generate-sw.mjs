@@ -38,9 +38,10 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  // Navegación: siempre la página principal guardada (funciona sin conexión).
+  // Navegación: siempre la versión nueva de la red (sin la caché HTTP de 10 min de GitHub Pages);
+  // sin conexión, la página principal guardada.
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).catch(() => caches.match('./')));
+    e.respondWith(fetch(req, { cache: 'no-cache' }).catch(() => caches.match('./')));
     return;
   }
   e.respondWith(
