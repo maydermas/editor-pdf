@@ -29,6 +29,7 @@ export const FONTS: Record<FontFamily, FontDef> = {
   lato: { label: 'Lato', css: '"EPDF Lato", Lato, sans-serif', file: 'lato', match: /\blato|lato-|lato,/ },
   montserrat: { label: 'Montserrat', css: '"EPDF Montserrat", Montserrat, sans-serif', file: 'montserrat', match: /montserrat/ },
   poppins: { label: 'Poppins', css: '"EPDF Poppins", Poppins, sans-serif', file: 'poppins', match: /poppins/ },
+  verdana: { label: 'Verdana / Tahoma', css: '"EPDF DejaVu Sans", Verdana, "DejaVu Sans", sans-serif', file: 'dejavu-sans', match: /verdana|tahoma|dejavu|bitstreamvera|\bvera/ },
 };
 
 export const FONT_ORDER = Object.keys(FONTS) as FontFamily[];
@@ -62,6 +63,9 @@ export function detectFont(name: string, generic = ''): { font: FontFamily; bold
 }
 
 const loading = new Map<FontFamily, Promise<void>>();
+const loaded = new Set<FontFamily>();
+/** Si la familia ya se puede medir con su letra real (las estándar siempre). */
+export const fontReady = (font: FontFamily) => !FONTS[font].file || loaded.has(font);
 
 /** Descarga y registra las cuatro variantes de una familia para verla en pantalla. */
 export function loadFont(font: FontFamily): Promise<void> {
@@ -76,7 +80,7 @@ export function loadFont(font: FontFamily): Promise<void> {
         document.fonts.add(await face.load());
       }),
     ).then(
-      () => undefined,
+      () => void loaded.add(font),
       (e) => console.warn('No se pudo cargar la fuente', font, e),
     );
     loading.set(font, p);

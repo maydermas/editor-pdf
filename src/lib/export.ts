@@ -75,11 +75,14 @@ async function drawAnnotation(doc: PDFDocument, page: PDFPage, a: Annotation, h:
   switch (a.type) {
     case 'text': {
       const font = await fonts.get(a);
+      const sx = a.scaleX && a.scaleX !== 1 ? a.scaleX : 0;
+      if (sx) page.pushOperators(pushGraphicsState(), concatTransformationMatrix(sx, 0, 0, 1, a.x * (1 - sx), 0));
       a.text.split('\n').forEach((line, i) => {
         if (!line) return;
         const baseline = a.y + a.fontSize * (BASELINE + i * LINE_HEIGHT);
         page.drawText(encodable(font, line), { x: a.x, y: h - baseline, size: a.fontSize, font, color: hexToRgb(a.color) });
       });
+      if (sx) page.pushOperators(popGraphicsState());
       break;
     }
     case 'ink':

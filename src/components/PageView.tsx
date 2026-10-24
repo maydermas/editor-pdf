@@ -3,8 +3,9 @@ import type { Annotation, BoxAnn, Page, TextAnn, Tool, ToolStyle } from '../type
 import { PageCanvas } from './PageCanvas';
 import { AnnotationShape } from './AnnotationSvg';
 import { BASELINE, FONT_CSS, LINE_HEIGHT, bbox, canResize, measureText, resizeTo, today, translate } from '../lib/annotations';
-import { charX, getTextRuns, pageRaster, pageRasterReady, runBox, sampleColors, type TextRun } from '../lib/textRuns';
+import { charX, fitScale, getTextRuns, pageRaster, pageRasterReady, runBox, sampleColors, type TextRun } from '../lib/textRuns';
 import { uid } from '../lib/id';
+import { fontReady, loadFont } from '../lib/fonts';
 
 export interface Stamp {
   src: string;
@@ -72,6 +73,8 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       .then((r) => {
         if (alive) setRuns(r);
         if (r.length) pageRaster(page).catch(() => null);
+        // Las letras parecidas se cargan ya, para poder medirlas al pulsar una línea.
+        for (const f of new Set(r.map((x) => x.font))) loadFont(f);
       })
       .catch(() => alive && setRuns([]));
     return () => {
@@ -103,6 +106,8 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       coverId,
       sourceKey: run.key,
     };
+    // Con la letra ya cargada se mide si la original es más ancha o estrecha (frecuente en DNI e importes).
+    if (fontReady(run.font)) text.scaleX = fitScale(run, (s) => measureText(text, s));
     api.update(
       page.id,
       (anns) => [...anns.filter((a) => !('sourceKey' in a && a.sourceKey === run.key)), { id: coverId, type: 'whiteout', ...box, color: bg, width: 0, sourceKey: run.key }, text],
@@ -502,10 +507,10 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
                   top: editing.y * zoom,
                   // El iPhone amplía toda la página al escribir en un campo con letra de menos de 16 px.
                   // Se escribe a 16 px y se reduce con transform: se ve igual y no hay zoom.
-                  width: Math.max(60, bbox(editing).w * zoom + editing.fontSize * zoom * 2) / inputScale,
+                  width: Math.max(60, bbox(editing).w * zoom + editing.fontSize * zoom * 2) / (inputScale * (editing.scaleX ?? 1)),
                   height: (editing.text.split('\n').length * editing.fontSize * LINE_HEIGHT * zoom + 2) / inputScale,
                   fontSize: (editing.fontSize * zoom) / inputScale,
-                  transform: inputScale < 1 ? `scale(${inputScale})` : undefined,
+                  transform: inputScale < 1 || editing.scaleX ? `scale(${inputScale * (editing.scaleX ?? 1)}, ${inputScale})` : undefined,
                   transformOrigin: '0 0',
                   borderWidth: 1 / inputScale,
                   fontFamily: FONT_CSS[editing.font],

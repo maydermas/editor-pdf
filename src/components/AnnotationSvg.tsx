@@ -1,5 +1,5 @@
 import type { Annotation } from '../types';
-import { BASELINE, FONT_CSS, LINE_HEIGHT, NOTE_SIZE, arrowHead, inkPath, markPath } from '../lib/annotations';
+import { BASELINE, FONT_CSS, LINE_HEIGHT, NOTE_SIZE, arrowHead, inkPath, markPath, stretch } from '../lib/annotations';
 
 interface Props {
   a: Annotation;
@@ -27,6 +27,7 @@ export function AnnotationShape({ a, hidden, onPointerDown, onDoubleClick }: Pro
           fontWeight={a.bold ? 700 : 400}
           fontStyle={a.italic ? 'italic' : 'normal'}
           xmlSpace="preserve"
+          transform={stretch(a)}
           className="ann-text"
         >
           {a.text.split('\n').map((line, i) => (

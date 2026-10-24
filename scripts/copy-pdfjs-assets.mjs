@@ -8,7 +8,7 @@ for (const dir of ['standard_fonts', 'cmaps']) {
 // Tipografías libres para editar texto con una letra parecida a la del PDF (ver src/lib/fonts.ts).
 // Solo el alfabeto latino, en pesos 400 y 700, normal y cursiva.
 mkdirSync('public/fonts', { recursive: true });
-for (const pkg of ['carlito', 'caladea', 'gelasio', 'eb-garamond', 'roboto', 'open-sans', 'lato', 'montserrat', 'poppins']) {
+for (const pkg of ['carlito', 'caladea', 'gelasio', 'eb-garamond', 'roboto', 'open-sans', 'lato', 'montserrat', 'poppins', 'dejavu-sans']) {
   const dir = `node_modules/@fontsource/${pkg}/files`;
   for (const f of readdirSync(dir)) {
     if (/^[a-z-]+-latin-(400|700)-(normal|italic)\.woff$/.test(f)) cpSync(`${dir}/${f}`, `public/fonts/${f}`);
