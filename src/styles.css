@@ -1268,11 +1268,6 @@ h3 {
   border-color: var(--primary);
   background: rgba(79, 70, 229, 0.08);
 }
-@media (hover: none) {
-  .text-run {
-    border-color: rgba(79, 70, 229, 0.35);
-  }
-}
 .ad-modal .ad-demo {
   min-height: 120px;
 }
