@@ -18,14 +18,14 @@ export const guias = [
   <li><strong>Pulsa «Listo»</strong>, elige el formato (PDF, PDF comprimido, JPG o PNG) y descarga.</li>
 </ol>
 
-<h2>Cómo cambiar un texto que ya está en el PDF</h2>
-<p>Un PDF no guarda párrafos editables, sino letras colocadas en posiciones fijas. La forma más fiable de «corregir» un texto existente es <strong>taparlo y escribir encima</strong>:</p>
+<h2>Cómo cambiar o borrar un texto que ya está en el PDF</h2>
 <ol>
-  <li>Elige la herramienta <strong>Tapar</strong> y arrastra sobre el texto que quieres sustituir. Queda cubierto por un rectángulo blanco.</li>
-  <li>Elige <strong>Texto</strong>, haz clic en el mismo sitio y escribe el texto nuevo.</li>
-  <li>Ajusta el tamaño de letra hasta que coincida con el resto. Si el documento usa una letra con remates, prueba la opción «Serif (Times)».</li>
+  <li>Elige la herramienta <strong>Texto</strong> (está activa al abrir el documento). Los textos del PDF se marcan al pasar el ratón por encima.</li>
+  <li><strong>Pulsa el texto</strong> que quieras cambiar. Se abre para editar con su mismo tipo de letra, tamaño, negrita y color, y el original queda tapado con el color del fondo.</li>
+  <li>Escribe el texto nuevo. Para <strong>borrarlo</strong>, deja el cuadro vacío y pulsa fuera.</li>
 </ol>
-<p>Ten en cuenta que tapar un texto lo oculta a la vista, pero no siempre lo elimina del archivo. Si el dato es confidencial (un número de cuenta, por ejemplo), exporta como <strong>PDF comprimido</strong>: las páginas se convierten en imagen y el texto original desaparece del todo.</p>
+<p>El resto de la página no se toca: conserva su formato original. Si el PDF es escaneado (una foto del papel), no tiene texto que se pueda pulsar; en ese caso usa <strong>Tapar</strong> y escribe encima con <strong>Texto</strong>.</p>
+<p>El texto original queda oculto a la vista, pero puede seguir dentro del archivo. Si el dato es confidencial (un número de cuenta, por ejemplo), descarga como <strong>PDF comprimido</strong>: las páginas se convierten en imagen y el texto original desaparece del todo.</p>
 
 <h2>Trucos útiles</h2>
 <ul>

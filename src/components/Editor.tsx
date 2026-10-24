@@ -27,7 +27,7 @@ interface Props {
 export function Editor({ initialPages, fileName: initialName, intent, onExit }: Props) {
   const history = useHistory<Page[]>(initialPages);
   const pages = history.present;
-  const [tool, setTool] = useState<Tool>(intent.tool ?? 'select');
+  const [tool, setTool] = useState<Tool>(intent.tool ?? 'text');
   const [style, setStyle] = useState<ToolStyle>({ color: '#111827', width: 2, fontSize: 14, font: 'helvetica', bold: false, italic: false });
   const [selected, setSelected] = useState<{ pageId: string; annId: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PDFDocument, StandardFonts, degrees } from 'pdf-lib';
+import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
@@ -25,6 +25,11 @@ p1.drawText('Documento de prueba - pagina 1', { x: 50, y: 780, size: 20, font })
 const p2 = src.addPage([595, 842]);
 p2.drawText('Pagina 2 girada', { x: 50, y: 780, size: 20, font });
 p2.setRotation(degrees(90));
+const p3 = src.addPage([595, 842]);
+const timesBold = await src.embedFont(StandardFonts.TimesRomanBold);
+p3.drawRectangle({ x: 0, y: 700, width: 595, height: 60, color: rgb(0.9, 0.9, 0.9) });
+p3.drawText('Factura numero 1234', { x: 60, y: 722, size: 18, font: timesBold, color: rgb(0.1, 0.2, 0.7) });
+p3.drawText('Texto que no se toca', { x: 60, y: 600, size: 12, font });
 const srcPath = join(OUT, 'entrada.pdf');
 writeFileSync(srcPath, await src.save());
 
@@ -50,7 +55,7 @@ try {
   await page.waitForSelector('.page-slot');
   await page.waitForTimeout(800);
   const slots = await page.locator('.page-slot').count();
-  check('abre el PDF con 2 páginas', slots === 2, `páginas=${slots}`);
+  check('abre el PDF con 3 páginas', slots === 3, `páginas=${slots}`);
   const p2box = await page.locator('.page-wrap').nth(1).boundingBox();
   check('página con /Rotate 90 se muestra apaisada', p2box.width > p2box.height, `${Math.round(p2box.width)}×${Math.round(p2box.height)}`);
 
@@ -117,18 +122,36 @@ try {
   const p1box = await page.locator('.page-wrap').first().boundingBox();
   check('girar página', p1box.width > p1box.height);
 
+  // Editar un texto que ya trae el PDF (página 3): conserva fuente, color y fondo.
+  await page.getByRole('button', { name: /^Texto/ }).click();
+  await page.locator('.page-wrap').nth(2).scrollIntoViewIfNeeded();
+  const run = page.getByRole('button', { name: 'Editar texto: Factura numero 1234' });
+  await run.waitFor();
+  await run.click();
+  const ed = page.locator('.text-editor');
+  check('el texto original se abre para editar con su contenido', (await ed.inputValue()) === 'Factura numero 1234');
+  const edStyle = await ed.evaluate((el) => ({ w: getComputedStyle(el).fontWeight, f: getComputedStyle(el).fontFamily, c: getComputedStyle(el).color }));
+  const near = (css, rgbWanted) => (css.match(/\d+/g) || []).slice(0, 3).every((v, i) => Math.abs(Number(v) - rgbWanted[i]) <= 4);
+  check('conserva negrita, tipo de letra y color', edStyle.w === '700' && /Times/.test(edStyle.f) && near(edStyle.c, [26, 51, 179]), JSON.stringify(edStyle));
+  await ed.fill('Factura numero 5678');
+  await page.keyboard.press('Escape');
+  const coverFill = await page.locator('.page-slot').nth(2).locator('.viewer .ann-whiteout, .ann-whiteout').first().getAttribute('fill');
+  check('el parche usa el color del fondo', /^#e[4-8]e[4-8]e[4-8]$/.test(coverFill || ''), coverFill);
+  await page.getByRole('button', { name: /^Seleccionar/ }).click();
+  await page.locator('.viewer').evaluate((el) => (el.scrollTop = 0));
+
   await page.screenshot({ path: join(OUT, 'editor-1280.png') });
 
   // Exportar PDF
   await page.getByRole('button', { name: /Listo/ }).click();
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Descargar 2 páginas/ }).click()]);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Descargar 3 páginas/ }).click()]);
   const outPath = join(OUT, 'salida.pdf');
   await download.saveAs(outPath);
   await page.getByText('está listo').waitFor();
 
   const data = new Uint8Array(readFileSync(outPath));
   const doc = await pdfjs.getDocument({ data, isEvalSupported: false }).promise;
-  check('PDF exportado con 2 páginas', doc.numPages === 2, `páginas=${doc.numPages}`);
+  check('PDF exportado con 3 páginas', doc.numPages === 3, `páginas=${doc.numPages}`);
   const pg1 = await doc.getPage(1);
   const pg2 = await doc.getPage(2);
   const text = (await pg1.getTextContent()).items.map((i) => i.str).join(' ');
@@ -138,6 +161,10 @@ try {
   check('la nota es un comentario PDF', annots.some((a) => a.subtype === 'Text' && (a.contentsObj?.str ?? a.contents) === 'Revisar esta cifra'));
   const ops = await pg2.getOperatorList();
   check('la firma es una imagen en la página 2', ops.fnArray.includes(pdfjs.OPS.paintImageXObject));
+
+  const pg3 = await doc.getPage(3);
+  const t3 = (await pg3.getTextContent()).items.map((i) => i.str).join(' | ');
+  check('el texto reescrito y el resto están en el PDF', t3.includes('Factura numero 5678') && t3.includes('Texto que no se toca'), t3);
 
   // Posición: el texto debe estar arriba a la izquierda de la página 1 (vista sin rotación de usuario).
   const item = (await pg1.getTextContent()).items.find((i) => i.str.includes('Hola'));
@@ -172,8 +199,12 @@ try {
   await mp.waitForSelector('.page-slot');
   await mp.waitForTimeout(800);
   await mp.screenshot({ path: join(OUT, 'editor-375.png') });
-  const mOverflow = await mp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-  check('editor sin scroll horizontal en móvil', !mOverflow);
+  const mOverflow = await mp.evaluate(() => {
+    if (document.documentElement.scrollWidth <= window.innerWidth) return false;
+    const wide = [...document.querySelectorAll('body *')].find((el) => el.getBoundingClientRect().right > window.innerWidth + 1 && !el.closest('.viewer, .toolbar, .propbar'));
+    return wide ? wide.className || wide.tagName : 'desconocido';
+  });
+  check('editor sin scroll horizontal en móvil', !mOverflow, String(mOverflow));
 
   check('sin errores de JavaScript', errors.length === 0, errors.join(' | '));
 } catch (e) {
