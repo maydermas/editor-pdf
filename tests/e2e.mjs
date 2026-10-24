@@ -164,9 +164,8 @@ try {
 
   const pg3 = await doc.getPage(3);
   const t3 = (await pg3.getTextContent()).items.map((i) => i.str).join(' | ');
-  // Solo se redibuja la palabra cambiada («5678»); el resto de la línea es el texto original.
-  const items3 = (await pg3.getTextContent()).items.map((i) => i.str);
-  check('el texto reescrito y el resto están en el PDF', items3.includes('5678') && t3.includes('Factura numero') && t3.includes('Texto que no se toca'), t3);
+  // El número se cambia dentro del propio PDF: misma línea, misma fuente, sin el «1234» debajo.
+  check('el texto reescrito y el resto están en el PDF', t3.includes('Factura numero 5678') && !t3.includes('1234') && t3.includes('Texto que no se toca'), t3);
 
   // Posición: el texto debe estar arriba a la izquierda de la página 1 (vista sin rotación de usuario).
   const item = (await pg1.getTextContent()).items.find((i) => i.str.includes('Hola'));

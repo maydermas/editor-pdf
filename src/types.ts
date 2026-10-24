@@ -77,6 +77,10 @@ export interface BoxAnn {
   sourceKey?: string;
   /** Texto completo de la línea tras la edición, para poder volver a editarla entera. */
   lineText?: string;
+  /** Texto del PDF que sustituye este parche (permite cambiarlo dentro del propio PDF). */
+  oldText?: string;
+  /** Huella del texto nuevo al editarlo (ver textSig). */
+  textSig?: string;
 }
 
 export interface LineAnn {

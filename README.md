@@ -9,6 +9,10 @@ de un editor PDF en línea, con diseño, textos, logotipo e iconos propios.
 - **Editar**: texto (fuente, tamaño, color, negrita, cursiva), fecha, dibujo a mano alzada, resaltado, tapar con blanco,
   rectángulo, elipse, línea, flecha, marcas ✓ ✗ •, notas adhesivas (comentarios PDF reales), imágenes y firma
   (dibujada, escrita o subida; guarda las 3 últimas en el navegador).
+- **Cambiar el texto que ya trae el PDF**: se quitan las letras antiguas del contenido de la página y se escriben las
+  nuevas con la misma fuente, tamaño, color y espaciado (`src/lib/contentEdit.ts`); lo que se ve en pantalla es la
+  página ya cambiada, igual que la descarga. Si la fuente incrustada no tiene alguna letra nueva, se usa la tipografía
+  libre más parecida; si el texto está en una capa invisible de un escaneo, se tapa como antes.
 - **Seleccionar**: mover, redimensionar, duplicar, eliminar, copiar/pegar, mover con flechas.
 - **Páginas**: miniaturas, reordenar arrastrando, girar, duplicar, eliminar, página en blanco, añadir otro archivo.
 - **Deshacer/rehacer**, zoom (botones, Ctrl+rueda, ajustar al ancho), indicador de página.
@@ -56,6 +60,7 @@ npm test           # pruebas unitarias
 npm run build && npm run e2e   # recorrido completo con Playwright (OUT_DIR=carpeta de salida)
 node tests/pwa.mjs archivo.pdf  # instalable y sin conexión
 node tests/pages.mjs            # páginas estáticas y enlaces
+node tests/edicion-real.mjs     # cambiar texto dentro del PDF (pantalla y descarga)
 ```
 
 ## Estructura
