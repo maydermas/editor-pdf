@@ -296,6 +296,11 @@ try {
   await touch('touchEnd', []);
   await tp.waitForTimeout(200);
   check('tocar sin arrastrar abre un cuadro de texto', (await tp.locator('.text-editor').count()) === 1);
+  await tp.locator('.zoom-value').tap();
+  await tp.waitForTimeout(300);
+  const twFit = await tp.locator('.page-wrap').first().boundingBox();
+  check('tocar el porcentaje vuelve al tamaño de la pantalla', Math.abs(twFit.width - tw0.width) < 2, `ancho ${Math.round(twFit.width)}`);
+  check('la página web no se puede ampliar entera mientras se edita', (await tp.locator('meta[name=viewport]').getAttribute('content')).includes('user-scalable=no'));
   await tp.screenshot({ path: join(OUT, 'editor-375-zoom.png') });
   await t.close();
 

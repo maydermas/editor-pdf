@@ -299,7 +299,37 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
       wheelTimer.current = window.setTimeout(() => visualRef.current.commit(), 180);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    // Safari (iPhone) no siempre respeta touch-action: sin esto, además de nuestro zoom y desplazamiento,
+    // el navegador hace los suyos (todo va a saltos y la web entera se queda ampliada).
+    const noNative = (e: Event) => e.cancelable && e.preventDefault();
+    el.addEventListener('touchmove', noNative, { passive: false });
+    document.addEventListener('gesturestart', noNative);
+    document.addEventListener('gesturechange', noNative);
+    // Si un dedo se suelta fuera del visor, el visor no se entera: se recoge aquí para no dejar el zoom a medias.
+    const lostTouch = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' || !touches.current.has(e.pointerId)) return;
+      touches.current.delete(e.pointerId);
+      if (dragPan.current?.id === e.pointerId) dragPan.current = null;
+      if (pinch.current && touches.current.size < 2) {
+        pinch.current = null;
+        visualRef.current.commit();
+      }
+    };
+    window.addEventListener('pointerup', lostTouch);
+    window.addEventListener('pointercancel', lostTouch);
+    // Mientras se edita, el pellizco es del documento, no de la página web.
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    const metaBefore = meta?.content;
+    if (meta) meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchmove', noNative);
+      document.removeEventListener('gesturestart', noNative);
+      document.removeEventListener('gesturechange', noNative);
+      window.removeEventListener('pointerup', lostTouch);
+      window.removeEventListener('pointercancel', lostTouch);
+      if (meta && metaBefore) meta.content = metaBefore;
+    };
   }, []);
   const visualRef = useRef({
     active: () => !!visual.current,
@@ -322,6 +352,7 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
       if (e.isPrimary) {
         touches.current.clear();
         pinch.current = null;
+        if (visual.current) commitVisual();
       }
       touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.current.size >= 2) {
@@ -584,7 +615,16 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
           <button className="icon-btn" onClick={() => stepZoom(-1)} aria-label="Alejar">
             <Icon name="zoomOut" />
           </button>
-          <button className="zoom-value" onClick={fitWidth} title="Ajustar al ancho">
+          <button
+            className="zoom-value"
+            onClick={() => {
+              const r = mainRef.current?.getBoundingClientRect();
+              if (r) setAnchorAt(r.left + r.width / 2, r.top + r.height / 2);
+              fitWidth();
+            }}
+            title="Ajustar al ancho"
+            aria-label="Ajustar al ancho de la pantalla"
+          >
             {Math.round(zoom * 100)} %
           </button>
           <button className="icon-btn" onClick={() => stepZoom(1)} aria-label="Acercar">

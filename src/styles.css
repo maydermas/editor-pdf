@@ -1178,9 +1178,14 @@ h3 {
   }
   .logo-text,
   .file-name,
-  .page-indicator,
-  .head-group.zoom .zoom-value {
+  .page-indicator {
     display: none;
+  }
+  /* En el móvil el porcentaje se queda: tocarlo vuelve al tamaño de la pantalla. */
+  .head-group.zoom .zoom-value {
+    min-width: 0;
+    padding: 6px 4px;
+    font-size: 12px;
   }
   .editor-head {
     gap: 4px;
