@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Modal } from './Modal';
 import { Icon } from './Icon';
+import { AdSlot } from './AdSlot';
 import { parsePageRanges } from '../lib/pageRange';
 import { downloadBlob, exportDocument, type ExportResult } from '../lib/export';
 import type { ExportFormat, Page } from '../types';
@@ -135,6 +136,7 @@ export function ExportModal({ pages, fileName, initialFormat = 'pdf', onClose }:
               Seguir editando
             </button>
           </div>
+          <AdSlot slot="exportDone" className="ad-modal" />
         </div>
       )}
 

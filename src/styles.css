@@ -452,6 +452,33 @@ h3 {
   letter-spacing: 0.06em;
   margin-bottom: 4px;
 }
+.ad-demo {
+  display: grid;
+  place-items: center;
+  min-height: 250px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: repeating-linear-gradient(45deg, transparent 0 10px, rgba(0, 0, 0, 0.03) 10px 20px);
+  color: var(--muted);
+  font-size: 13px;
+}
+/* Columna derecha del editor: solo en pantallas anchas, para no quitar sitio al documento. */
+.ad-rail {
+  width: 300px;
+  flex: none;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+/* Separado de los botones para evitar clics sin querer. */
+.ad-modal {
+  width: 100%;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  min-height: 0;
+}
 .foot-row {
   display: flex;
   flex-wrap: wrap;
@@ -1204,4 +1231,7 @@ h3 {
   .text-run {
     border-color: rgba(79, 70, 229, 0.35);
   }
+}
+.ad-modal .ad-demo {
+  min-height: 120px;
 }

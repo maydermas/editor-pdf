@@ -10,6 +10,7 @@ import { Sidebar } from './Sidebar';
 import { PropertiesBar, SHORTCUTS, Toolbar } from './Toolbar';
 import { SignatureModal } from './SignatureModal';
 import { ExportModal } from './ExportModal';
+import { AdSlot } from './AdSlot';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
 
@@ -51,6 +52,14 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
   const [showSignature, setShowSignature] = useState(!!intent.openSignature);
   const [exportFormat, setExportFormat] = useState<ExportFormat | null>(intent.exportFormat ?? null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760);
+  // La columna de publicidad solo cabe en pantallas anchas; en el resto no se carga.
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1280px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1280px)');
+    const on = () => setWide(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   const [toast, setToast] = useState<string | null>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
@@ -555,6 +564,7 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
             <PageView key={p.id} page={p} number={i + 1} api={api} />
           ))}
         </main>
+        {wide && <AdSlot slot="editorSide" className="ad-rail" />}
       </div>
 
       <input
