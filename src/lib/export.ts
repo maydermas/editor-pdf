@@ -18,6 +18,7 @@ import { PDFJS_OPTIONS, getDoc } from './docs';
 import { BASELINE, LINE_HEIGHT, NOTE_SIZE, arrowHead, inkPath, markPath } from './annotations';
 import { apply, displayUpToPdf, type Matrix } from './matrix';
 import { FONTS, fontUrl } from './fonts';
+import { applyTextEdits, handledAnnotations, textEditsOf } from './contentEdit';
 import fontkit from '@pdf-lib/fontkit';
 import type { Annotation, ExportFormat, FontFamily, Page, TextAnn } from '../types';
 
@@ -177,7 +178,10 @@ export async function buildPdf(pages: Page[]): Promise<Uint8Array> {
     const vp = jsPage.getViewport({ scale: 1 });
     page.setRotation(degrees((jsPage.rotate + p.rotation) % 360));
 
-    const drawable = p.annotations.filter((a) => a.type !== 'note' || a.text.trim());
+    // Primero, los cambios de texto del PDF se hacen dentro del propio contenido de la página.
+    const outcome = applyTextEdits(out, page, vp.transform as Matrix, textEditsOf(p.annotations));
+    const handled = handledAnnotations(p.annotations, outcome);
+    const drawable = p.annotations.filter((a) => !handled.has(a.id) && (a.type !== 'note' || a.text.trim()));
     if (!drawable.length) continue;
 
     // Aísla el contenido original para que su estado gráfico no afecte a lo que añadimos.

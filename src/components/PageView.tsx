@@ -6,6 +6,9 @@ import { BASELINE, FONT_CSS, LINE_HEIGHT, bbox, canResize, measureAscent, measur
 import { charX, fitScale, getTextRuns, inkAscent, pageRaster, pageRasterReady, runBox, sampleColors, type TextRun } from '../lib/textRuns';
 import { uid } from '../lib/id';
 import { fontReady, loadFont } from '../lib/fonts';
+import { textEditsOf, textSig } from '../lib/contentEdit';
+import { editedPage, type EditedPage } from '../lib/preview';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 export interface Stamp {
   src: string;
@@ -132,6 +135,33 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
     api.select(page.id, text.id);
     api.setEditing(text.id);
   };
+
+  // Los cambios de texto ya terminados se ven hechos dentro del PDF (igual que al descargar).
+  const edits = textEditsOf(page.annotations, editingTextId(page, api.editingId));
+  const editsKey = JSON.stringify(edits);
+  const [edited, setEdited] = useState<EditedPage | null>(null);
+  const [rendered, setRendered] = useState<PDFDocumentProxy | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      editedPage(page, page.annotations, edits)
+        .then((r) => alive && setEdited(r))
+        .catch(() => alive && setEdited(null));
+    }, 120);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editsKey, page.docId, page.index]);
+  useEffect(() => {
+    const pdf = edited?.pdf;
+    // La versión anterior se suelta cuando ya no se usa.
+    return () => {
+      if (pdf) setTimeout(() => pdf.destroy(), 2000);
+    };
+  }, [edited]);
+  const handled = edited && rendered === edited.pdf ? edited.handled : null;
 
   const selectedId = api.selected?.pageId === page.id ? api.selected.annId : null;
   const selected = page.annotations.find((a) => a.id === selectedId) ?? null;
@@ -433,7 +463,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
             transform: `translate(-50%, -50%) rotate(${page.rotation}deg)`,
           }}
         >
-          <PageCanvas page={page} scale={zoom} />
+          <PageCanvas page={page} scale={zoom} source={edited?.pdf ?? null} onRendered={setRendered} />
           <div
             className={`page-overlay${interactiveAnns ? ' is-interactive' : ''}`}
             style={{ cursor }}
@@ -473,6 +503,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
                   key={a.id}
                   a={a}
                   hidden={editing?.id === a.id && a.type === 'text'}
+                  ghost={!!handled?.has(a.id)}
                   onPointerDown={onAnnDown}
                   onDoubleClick={(ann) => {
                     if (ann.type === 'text' || ann.type === 'note') {
@@ -579,6 +610,11 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
   );
 }
 
+/** El texto que se está escribiendo ahora en esta página (su cambio aún no se aplica dentro del PDF). */
+function editingTextId(page: Page, id: string | null) {
+  return id && page.annotations.some((a) => a.id === id && a.type === 'text') ? id : null;
+}
+
 /**
  * Convierte la edición de una línea entera en un parche mínimo: se busca qué palabras cambiaron y solo
  * esas se tapan y se vuelven a escribir. El resto conserva las letras, el espaciado y la tipografía
@@ -611,7 +647,14 @@ function minimalPatch(run: TextRun, t: TextAnn, cover: BoxAnn): [Annotation, Tex
   const pad = Math.max(0.4, t.fontSize * 0.04);
   const left = p === 0 ? cover.x : x0 - pad;
   const right = s === 0 ? cover.x + cover.w : x1 + pad;
-  const patchCover = { ...cover, x: left, w: Math.max(0, right - left), lineText: N };
   const patchText = mid ? { ...t, x: p === 0 ? t.x : x0, text: mid, keep: [p, s] as [number, number] } : null;
+  const patchCover = {
+    ...cover,
+    x: left,
+    w: Math.max(0, right - left),
+    lineText: N,
+    oldText: O.slice(p, O.length - s),
+    textSig: patchText ? textSig(patchText) : undefined,
+  };
   return [patchCover, patchText];
 }

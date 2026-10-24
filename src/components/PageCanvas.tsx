@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { RenderTask } from 'pdfjs-dist';
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { getDoc } from '../lib/docs';
 import type { Page } from '../types';
 
@@ -9,7 +9,18 @@ const MAX_CANVAS_PIXELS = 6_000_000;
  * Pinta una página con pdf.js. Solo renderiza cuando está cerca de la vista,
  * y vuelve a pintar (con un pequeño retardo) cuando cambia la escala.
  */
-export function PageCanvas({ page, scale }: { page: Page; scale: number }) {
+export function PageCanvas({
+  page,
+  scale,
+  source,
+  onRendered,
+}: {
+  page: Page;
+  scale: number;
+  /** Página ya editada (un PDF de una sola página) que se pinta en lugar de la original. */
+  source?: PDFDocumentProxy | null;
+  onRendered?: (source: PDFDocumentProxy | null) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState(false);
@@ -37,7 +48,7 @@ export function PageCanvas({ page, scale }: { page: Page; scale: number }) {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const pdfPage = await getDoc(page.docId).pdf.getPage(page.index + 1);
+        const pdfPage = source ? await source.getPage(1) : await getDoc(page.docId).pdf.getPage(page.index + 1);
         if (cancelled || !canvasRef.current) return;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         // Tope de píxeles: un lienzo enorme con mucho zoom agota la memoria del móvil (y Safari lo deja en blanco).
@@ -56,6 +67,7 @@ export function PageCanvas({ page, scale }: { page: Page; scale: number }) {
         c.getContext('2d')!.drawImage(off, 0, 0);
         off.width = 0;
         off.height = 0;
+        onRendered?.(source ?? null);
       } catch (e) {
         if ((e as { name?: string })?.name !== 'RenderingCancelledException' && !cancelled) setError(true);
       }
@@ -65,7 +77,7 @@ export function PageCanvas({ page, scale }: { page: Page; scale: number }) {
       clearTimeout(timer);
       task?.cancel();
     };
-  }, [visible, scale, page.docId, page.index]);
+  }, [visible, scale, page.docId, page.index, source]);
 
   return (
     <>

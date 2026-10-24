@@ -29,7 +29,7 @@ export const FONTS: Record<FontFamily, FontDef> = {
   lato: { label: 'Lato', css: '"EPDF Lato", Lato, sans-serif', file: 'lato', match: /\blato|lato-|lato,/ },
   montserrat: { label: 'Montserrat', css: '"EPDF Montserrat", Montserrat, sans-serif', file: 'montserrat', match: /montserrat/ },
   poppins: { label: 'Poppins', css: '"EPDF Poppins", Poppins, sans-serif', file: 'poppins', match: /poppins/ },
-  verdana: { label: 'Verdana / Tahoma', css: '"EPDF DejaVu Sans", Verdana, "DejaVu Sans", sans-serif', file: 'dejavu-sans', match: /verdana|tahoma|dejavu|bitstreamvera|\bvera/ },
+  verdana: { label: 'Verdana / Tahoma', css: '"EPDF DejaVu Sans", Verdana, "DejaVu Sans", sans-serif', file: 'dejavu-sans', match: /verdana|tahoma|dejavu(?!serif)|bitstreamvera(?!serif)|\bvera(?!serif)/ },
 };
 
 export const FONT_ORDER = Object.keys(FONTS) as FontFamily[];

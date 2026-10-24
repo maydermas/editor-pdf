@@ -4,17 +4,19 @@ import { BASELINE, FONT_CSS, LINE_HEIGHT, NOTE_SIZE, arrowHead, inkPath, markPat
 interface Props {
   a: Annotation;
   hidden?: boolean;
+  /** Invisible pero se puede tocar (su cambio ya se ve dentro de la página). */
+  ghost?: boolean;
   onPointerDown?: (e: React.PointerEvent, a: Annotation) => void;
   onDoubleClick?: (a: Annotation) => void;
 }
 
 /** Dibuja una anotación en SVG con las mismas medidas que usa la exportación. */
-export function AnnotationShape({ a, hidden, onPointerDown, onDoubleClick }: Props) {
+export function AnnotationShape({ a, hidden, ghost, onPointerDown, onDoubleClick }: Props) {
   const common = {
     'data-ann': a.id,
     onPointerDown: onPointerDown ? (e: React.PointerEvent) => onPointerDown(e, a) : undefined,
     onDoubleClick: onDoubleClick ? () => onDoubleClick(a) : undefined,
-    style: hidden ? { visibility: 'hidden' as const } : undefined,
+    style: hidden ? { visibility: 'hidden' as const } : ghost ? { opacity: 0 } : undefined,
   };
   switch (a.type) {
     case 'text':
