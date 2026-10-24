@@ -14,8 +14,8 @@ const walk = (dir) => {
 };
 walk(DIST);
 
-// Las fuentes y CMaps de pdf.js se guardan al usarse, no de entrada (son muchos archivos).
-const precache = ['./', ...files.filter((f) => !f.startsWith('pdfjs/'))];
+// Las fuentes y CMaps de pdf.js y las tipografías libres se guardan al usarse, no de entrada (son muchos archivos).
+const precache = ['./', ...files.filter((f) => !f.startsWith('pdfjs/') && !f.startsWith('fonts/'))];
 const hash = createHash('sha256');
 for (const f of files.sort()) hash.update(f).update(readFileSync(join(DIST, f)));
 const version = hash.digest('hex').slice(0, 12);

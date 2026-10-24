@@ -296,6 +296,9 @@ try {
   await touch('touchEnd', []);
   await tp.waitForTimeout(200);
   check('tocar sin arrastrar abre un cuadro de texto', (await tp.locator('.text-editor').count()) === 1);
+  // Con letra de menos de 16 px el iPhone amplía la página al escribir.
+  const editFont = await tp.locator('.text-editor').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  check('el cuadro de texto no provoca el zoom del iPhone', editFont >= 15.99, `${editFont.toFixed(1)} px`);
   await tp.locator('.zoom-value').tap();
   await tp.waitForTimeout(300);
   const twFit = await tp.locator('.page-wrap').first().boundingBox();

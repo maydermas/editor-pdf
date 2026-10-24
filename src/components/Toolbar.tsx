@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Annotation, FontFamily, Tool, ToolStyle } from '../types';
 import { Icon } from './Icon';
+import { FONTS, FONT_ORDER } from '../lib/fonts';
 
 interface ToolDef {
   id: Tool;
@@ -208,9 +209,11 @@ export function PropertiesBar({ tool, style, selected, onStyle, onDelete, onDupl
           <label className="prop">
             <span className="sr-only">Fuente</span>
             <select className="select" value={font.font} onChange={(e) => onStyle({ font: e.target.value as FontFamily })}>
-              <option value="helvetica">Sans (Helvetica)</option>
-              <option value="times">Serif (Times)</option>
-              <option value="courier">Mono (Courier)</option>
+              {FONT_ORDER.map((k) => (
+                <option key={k} value={k} style={{ fontFamily: FONTS[k].css }}>
+                  {FONTS[k].label}
+                </option>
+              ))}
             </select>
           </label>
           <div className="prop">

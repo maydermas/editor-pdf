@@ -1,10 +1,7 @@
 import type { Annotation, FontFamily, TextAnn } from '../types';
+import { FONTS } from './fonts';
 
-export const FONT_CSS: Record<FontFamily, string> = {
-  helvetica: 'Helvetica, Arial, sans-serif',
-  times: '"Times New Roman", Times, serif',
-  courier: '"Courier New", Courier, monospace',
-};
+export const FONT_CSS = Object.fromEntries(Object.entries(FONTS).map(([k, f]) => [k, f.css])) as Record<FontFamily, string>;
 
 export const LINE_HEIGHT = 1.2;
 /** Distancia de la parte superior de una línea a su línea base, en múltiplos del cuerpo. */

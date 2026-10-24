@@ -15,7 +15,19 @@ export type Tool =
   | 'date'
   | 'stamp';
 
-export type FontFamily = 'helvetica' | 'times' | 'courier';
+export type FontFamily =
+  | 'helvetica'
+  | 'times'
+  | 'courier'
+  | 'calibri'
+  | 'cambria'
+  | 'georgia'
+  | 'garamond'
+  | 'roboto'
+  | 'opensans'
+  | 'lato'
+  | 'montserrat'
+  | 'poppins';
 
 export interface TextAnn {
   id: string;

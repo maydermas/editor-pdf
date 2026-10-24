@@ -2,6 +2,7 @@ import * as pdfjs from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import { getDoc } from './docs';
 import type { FontFamily, Page } from '../types';
+import { detectFont } from './fonts';
 
 /** Una línea (o trozo de línea) de texto que ya trae el PDF, en puntos de la página tal como se ve. */
 export interface TextRun {
@@ -17,12 +18,6 @@ export interface TextRun {
 }
 
 const cache = new Map<string, Promise<TextRun[]>>();
-
-function guessFont(fontName: string, family: string): Pick<TextRun, 'font' | 'bold' | 'italic'> {
-  const n = `${fontName} ${family}`.toLowerCase();
-  const font: FontFamily = /courier|mono|consol/.test(n) ? 'courier' : /times|serif|georgia|garamond|roman|cambria|book/.test(n) && !/sans/.test(n) ? 'times' : 'helvetica';
-  return { font, bold: /bold|black|heavy|semibold|demi/.test(n), italic: /italic|oblique/.test(n) };
-}
 
 /**
  * Lee el texto de una página con pdf.js y une los trozos contiguos de la misma
@@ -58,7 +53,7 @@ export function getTextRuns(page: Page): Promise<TextRun[]> {
         const width = item.width;
         const style = content.styles[item.fontName];
         const info = fontInfo(item.fontName);
-        const guessed = guessFont(`${item.fontName} ${info.name ?? ''}`, style?.fontFamily ?? '');
+        const guessed = detectFont(`${info.name ?? ''} ${item.fontName}`, style?.fontFamily ?? '');
         pieces.push({
           key: '',
           text: item.str,

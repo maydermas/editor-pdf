@@ -38,3 +38,19 @@ describe('matrices', () => {
     expect(y).toBeCloseTo(0);
   });
 });
+
+describe('detectFont', async () => {
+  const { detectFont } = await import('../src/lib/fonts');
+  it('reconoce fuentes comerciales y elige su equivalente libre', () => {
+    expect(detectFont('ABCDEF+Calibri-Bold')).toEqual({ font: 'calibri', bold: true, italic: false });
+    expect(detectFont('Cambria-Italic')).toEqual({ font: 'cambria', bold: false, italic: true });
+    expect(detectFont('ArialMT')).toMatchObject({ font: 'helvetica' });
+    expect(detectFont('TimesNewRomanPS-BoldMT')).toEqual({ font: 'times', bold: true, italic: false });
+    expect(detectFont('Montserrat-SemiBold')).toMatchObject({ font: 'montserrat', bold: true });
+    expect(detectFont('g_d0_f3', 'monospace')).toMatchObject({ font: 'courier' });
+  });
+  it('sin pistas usa sans o serif según el tipo genérico', () => {
+    expect(detectFont('g_d0_f1', 'serif')).toMatchObject({ font: 'times' });
+    expect(detectFont('g_d0_f1', 'sans-serif')).toMatchObject({ font: 'helvetica' });
+  });
+});
