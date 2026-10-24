@@ -43,6 +43,11 @@ export interface TextAnn {
   /** Si sustituye a un texto del PDF: id del parche que tapa el original y clave de ese texto. */
   coverId?: string;
   sourceKey?: string;
+  /**
+   * Parche parcial: cuántos caracteres del texto original se conservan al principio y al final.
+   * Solo se redibuja lo que cambió; el resto de la línea sigue siendo el texto original del PDF.
+   */
+  keep?: [number, number];
 }
 
 export interface InkAnn {
@@ -64,6 +69,8 @@ export interface BoxAnn {
   width: number;
   /** Clave del texto original que tapa (solo parches de edición de texto). */
   sourceKey?: string;
+  /** Texto completo de la línea tras la edición, para poder volver a editarla entera. */
+  lineText?: string;
 }
 
 export interface LineAnn {

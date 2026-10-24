@@ -15,6 +15,8 @@ export interface TextRun {
   font: FontFamily;
   bold: boolean;
   italic: boolean;
+  /** Trozos de pdf.js que forman la línea: posición en `text` y en la página (para situar cada letra). */
+  segs: { start: number; end: number; x: number; w: number }[];
 }
 
 const cache = new Map<string, Promise<TextRun[]>>();
@@ -63,6 +65,7 @@ export function getTextRuns(page: Page): Promise<TextRun[]> {
           fontSize,
           fontName: item.fontName,
           end: tx[4] + width,
+          segs: [{ start: 0, end: item.str.length, x: tx[4], w: width }],
           ...guessed,
           bold: guessed.bold || !!info.bold || !!info.black,
           italic: guessed.italic || !!info.italic,
@@ -75,11 +78,13 @@ export function getTextRuns(page: Page): Promise<TextRun[]> {
         const sameLine = last && Math.abs(last.baseline - piece.baseline) < last.fontSize * 0.25;
         const gap = last ? piece.x - last.end : 0;
         if (last && sameLine && last.fontName === piece.fontName && Math.abs(last.fontSize - piece.fontSize) < 0.5 && gap > -last.fontSize * 0.3 && gap < last.fontSize * 0.9) {
-          last.text += gap > last.fontSize * 0.15 && !last.text.endsWith(' ') && !piece.text.startsWith(' ') ? ' ' + piece.text : piece.text;
+          if (gap > last.fontSize * 0.15 && !last.text.endsWith(' ') && !piece.text.startsWith(' ')) last.text += ' ';
+          last.segs.push({ start: last.text.length, end: last.text.length + piece.text.length, x: piece.x, w: piece.width });
+          last.text += piece.text;
           last.end = piece.end;
           last.width = last.end - last.x;
         } else {
-          runs.push({ ...piece });
+          runs.push({ ...piece, segs: [...piece.segs] });
         }
       }
       return runs.map(({ fontName: _f, end: _e, ...r }, i) => ({ ...r, text: r.text.replace(/\s+$/, ''), key: `${key}:${i}` }));
@@ -87,6 +92,21 @@ export function getTextRuns(page: Page): Promise<TextRun[]> {
     cache.set(key, p);
   }
   return p;
+}
+
+/**
+ * Posición horizontal (en puntos) del carácter `idx` de una línea del PDF. Dentro de cada trozo de pdf.js
+ * se reparte el ancho real en proporción a lo que mide cada letra con la fuente parecida.
+ */
+export function charX(r: TextRun, idx: number, measure: (s: string) => number): number {
+  for (const seg of r.segs) {
+    if (idx < seg.start) return seg.x;
+    if (idx <= seg.end) {
+      const all = measure(r.text.slice(seg.start, seg.end));
+      return seg.x + (all > 0 ? (seg.w * measure(r.text.slice(seg.start, idx))) / all : 0);
+    }
+  }
+  return r.x + r.width;
 }
 
 /** Caja que cubre un texto existente (con un pequeño margen para tapar del todo las letras). */

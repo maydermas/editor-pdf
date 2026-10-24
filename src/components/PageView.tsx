@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Annotation, Page, TextAnn, Tool, ToolStyle } from '../types';
+import type { Annotation, BoxAnn, Page, TextAnn, Tool, ToolStyle } from '../types';
 import { PageCanvas } from './PageCanvas';
 import { AnnotationShape } from './AnnotationSvg';
-import { BASELINE, FONT_CSS, LINE_HEIGHT, bbox, canResize, resizeTo, today, translate } from '../lib/annotations';
-import { getTextRuns, pageRaster, pageRasterReady, runBox, sampleColors, type TextRun } from '../lib/textRuns';
+import { BASELINE, FONT_CSS, LINE_HEIGHT, bbox, canResize, measureText, resizeTo, today, translate } from '../lib/annotations';
+import { charX, getTextRuns, pageRaster, pageRasterReady, runBox, sampleColors, type TextRun } from '../lib/textRuns';
 import { uid } from '../lib/id';
 
 export interface Stamp {
@@ -78,7 +78,6 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       alive = false;
     };
   }, [tool, page.docId, page.index]);
-  const replaced = new Set(page.annotations.map((a) => ('sourceKey' in a ? a.sourceKey : undefined)).filter(Boolean));
 
   /** Tapa el texto original con su color de fondo y pone encima una copia editable con su mismo formato. */
   const editRun = async (run: TextRun) => {
@@ -87,12 +86,15 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
     const canvas = pageRasterReady(page) ?? (await pageRaster(page).catch(() => null));
     const { bg, fg } = canvas ? sampleColors(canvas, page, box) : { bg: '#ffffff', fg: '#111111' };
     const coverId = uid('cover');
+    // Si la línea ya se había editado, se parte de su texto actual y se quita el parche anterior.
+    const prev = page.annotations.find((a) => a.type === 'whiteout' && a.sourceKey === run.key);
+    const current = prev?.type === 'whiteout' && prev.lineText !== undefined ? prev.lineText : run.text;
     const text: TextAnn = {
       id: uid('txt'),
       type: 'text',
       x: run.x,
       y: run.baseline - run.fontSize * BASELINE,
-      text: run.text,
+      text: current,
       fontSize: Math.round(run.fontSize * 10) / 10,
       font: run.font,
       bold: run.bold,
@@ -101,7 +103,11 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       coverId,
       sourceKey: run.key,
     };
-    api.update(page.id, (anns) => [...anns, { id: coverId, type: 'whiteout', ...box, color: bg, width: 0, sourceKey: run.key }, text], true);
+    api.update(
+      page.id,
+      (anns) => [...anns.filter((a) => !('sourceKey' in a && a.sourceKey === run.key)), { id: coverId, type: 'whiteout', ...box, color: bg, width: 0, sourceKey: run.key }, text],
+      true,
+    );
     api.select(page.id, text.id);
     api.setEditing(text.id);
   };
@@ -249,6 +255,13 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
     e.stopPropagation();
     if (api.editingId && api.editingId !== a.id) api.setEditing(null);
     api.select(page.id, a.id);
+    // Un trozo ya editado de una línea del PDF: se vuelve a abrir la línea entera.
+    const sourceRun = tool === 'text' && a.type === 'text' && a.keep ? runs.find((r) => r.key === a.sourceKey) : null;
+    if (sourceRun) {
+      e.preventDefault();
+      editRun(sourceRun);
+      return;
+    }
     if (tool === 'text' && a.type === 'text') {
       api.checkpoint();
       api.setEditing(a.id);
@@ -357,9 +370,15 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
   const settleText = (id: string) => {
     const a = page.annotations.find((x) => x.id === id);
     if (a?.type !== 'text') return;
-    const source = a.coverId ? runs.find((r) => r.key === a.sourceKey) : null;
-    if (source && a.text === source.text) {
-      api.update(page.id, (anns) => anns.filter((x) => x.id !== a.id && x.id !== a.coverId), false);
+    const source = a.coverId && !a.keep ? runs.find((r) => r.key === a.sourceKey) : null;
+    if (source) {
+      const cover = page.annotations.find((x) => x.id === a.coverId);
+      if (a.text === source.text || cover?.type !== 'whiteout') {
+        api.update(page.id, (anns) => anns.filter((x) => x.id !== a.id && x.id !== a.coverId), false);
+      } else {
+        const [patchCover, patchText] = minimalPatch(source, a, cover);
+        api.update(page.id, (anns) => anns.flatMap((x) => (x.id === a.coverId ? [patchCover] : x.id === a.id ? (patchText ? [patchText] : []) : [x])), false);
+      }
       if (selectedId === a.id) api.select(page.id, null);
     } else if (!a.text.trim()) {
       api.update(page.id, (anns) => anns.filter((x) => x.id !== a.id), false);
@@ -405,7 +424,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
             {tool === 'text' && (
               <div className="text-runs">
                 {runs
-                  .filter((r) => !replaced.has(r.key))
+                  .filter((r) => !(editing?.type === 'text' && editing.sourceKey === r.key))
                   .map((r) => {
                     const b = runBox(r);
                     return (
@@ -537,4 +556,41 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       <div className="page-number">{number}</div>
     </div>
   );
+}
+
+/**
+ * Convierte la edición de una línea entera en un parche mínimo: se busca qué palabras cambiaron y solo
+ * esas se tapan y se vuelven a escribir. El resto conserva las letras, el espaciado y la tipografía
+ * originales del PDF. Si el texto nuevo no cabe en el hueco, se redibuja también hasta el final de la línea.
+ */
+function minimalPatch(run: TextRun, t: TextAnn, cover: BoxAnn): [Annotation, TextAnn | null] {
+  const O = run.text;
+  const N = t.text;
+  const isSpace = (c: string | undefined) => c === undefined || /\s/.test(c);
+  let p = 0;
+  while (p < O.length && p < N.length && O[p] === N[p]) p++;
+  let s = 0;
+  while (s < O.length - p && s < N.length - p && O[O.length - 1 - s] === N[N.length - 1 - s]) s++;
+  // A palabras enteras: así no se mezclan dos letras distintas dentro de una misma palabra.
+  while (p > 0 && !(isSpace(O[p - 1]) || isSpace(O[p]))) p--;
+  while (s > 0 && !(isSpace(O[O.length - s - 1]) || isSpace(O[O.length - s]))) s--;
+  const measure = (str: string) => measureText(t, str);
+  let x0 = charX(run, p, measure);
+  let x1 = charX(run, O.length - s, measure);
+  let mid = N.slice(p, N.length - s);
+  if (measure(mid) > x1 - x0 + t.fontSize * 0.25) {
+    s = 0;
+    x1 = run.x + run.width;
+    mid = N.slice(p);
+  }
+  // Los espacios de los bordes no se dibujan: el hueco ya lo da el texto original que queda.
+  const lead = mid.length - mid.trimStart().length;
+  if (lead) x0 = charX(run, p + Math.min(lead, O.length - s - p), measure);
+  mid = mid.trim();
+  const pad = Math.max(0.4, t.fontSize * 0.04);
+  const left = p === 0 ? cover.x : x0 - pad;
+  const right = s === 0 ? cover.x + cover.w : x1 + pad;
+  const patchCover = { ...cover, x: left, w: Math.max(0, right - left), lineText: N };
+  const patchText = mid ? { ...t, x: p === 0 ? t.x : x0, text: mid, keep: [p, s] as [number, number] } : null;
+  return [patchCover, patchText];
 }
