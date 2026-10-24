@@ -263,6 +263,16 @@ try {
   const tw1 = await tp.locator('.page-wrap').first().boundingBox();
   check('pellizcar con dos dedos amplía', tw1.width > tw0.width * 1.6, `${Math.round(tw0.width)}→${Math.round(tw1.width)}`);
   check('el pellizco no deja marcas en la página', (await tp.locator('.viewer [data-ann], .text-editor').count()) === 0);
+  // Un segundo pellizco sigue ampliando, y el lienzo no pasa del tope de píxeles aunque el zoom sea máximo.
+  await touch('touchStart', [[170, 400]]);
+  await touch('touchStart', [[170, 400], [210, 400]]);
+  for (let i = 1; i <= 10; i++) await touch('touchMove', [[170 - i * 12, 400], [210 + i * 12, 400]]);
+  await touch('touchEnd', []);
+  await tp.waitForTimeout(1200);
+  const tw2 = await tp.locator('.page-wrap').first().boundingBox();
+  check('un segundo pellizco sigue ampliando', tw2.width > tw1.width * 1.3, `${Math.round(tw1.width)}→${Math.round(tw2.width)}`);
+  const maxPx = await tp.locator('.viewer .page-canvas').evaluateAll((cs) => Math.max(...cs.map((c) => c.width * c.height)));
+  check('los lienzos no se disparan de tamaño con mucho zoom', maxPx <= 6_050_000, `${(maxPx / 1e6).toFixed(1)} Mpx`);
   const sl0 = await tp.locator('.viewer').evaluate((el) => el.scrollLeft);
   await touch('touchStart', [[150, 400]]);
   await touch('touchStart', [[150, 400], [250, 400]]);

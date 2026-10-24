@@ -68,7 +68,23 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
   const anchor = useRef<Anchor | null>(null);
   const [anchorTick, setAnchorTick] = useState(0);
   const touches = useRef(new Map<number, { x: number; y: number }>());
-  const pinch = useRef<{ dist0: number; zoom0: number } | null>(null);
+  const pinch = useRef<{ dist0: number } | null>(null);
+  /**
+   * Zoom «visual» mientras dura un pellizco o la rueda: solo se escalan las páginas con CSS
+   * (barato) y al terminar se fija el zoom real, que es cuando se vuelven a pintar.
+   */
+  const visual = useRef<{
+    zoom0: number;
+    c0x: number;
+    c0y: number;
+    s: number;
+    cx: number;
+    cy: number;
+    anchor: Anchor | null;
+    slots: { el: HTMLElement; ox: number; oy: number }[];
+  } | null>(null);
+  const clearVisual = useRef(false);
+  const wheelTimer = useRef(0);
   const dragPan = useRef<{ x: number; y: number; sl: number; st: number; id: number } | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const dirty = history.canUndo;
@@ -201,9 +217,56 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
     v.scrollTop += r.top + a.fy * r.height - a.cy;
   };
   useLayoutEffect(() => {
+    // Quita la escala CSS del gesto justo antes de pintar con el zoom nuevo: así no hay saltos.
+    if (clearVisual.current) {
+      clearVisual.current = false;
+      mainRef.current?.querySelectorAll<HTMLElement>('.page-slot').forEach((el) => {
+        el.style.transform = '';
+        el.style.transformOrigin = '';
+        el.style.willChange = '';
+      });
+    }
     applyAnchor();
     if (!pinch.current) anchor.current = null;
   }, [zoom, anchorTick]);
+
+  const beginVisual = (cx: number, cy: number) => {
+    // El ancla se toma antes de transformar nada (getBoundingClientRect incluye las transformaciones).
+    setAnchorAt(cx, cy);
+    const a = anchor.current;
+    anchor.current = null;
+    const slots = [...(mainRef.current?.querySelectorAll<HTMLElement>('.page-slot') ?? [])].map((el) => {
+      const r = el.getBoundingClientRect();
+      el.style.willChange = 'transform';
+      return { el, ox: cx - r.left, oy: cy - r.top };
+    });
+    visual.current = { zoom0: zoomRef.current, c0x: cx, c0y: cy, s: 1, cx, cy, anchor: a, slots };
+  };
+
+  /** El punto que estaba bajo (c0x, c0y) pasa a (cx, cy), ampliado `scale` veces. */
+  const updateVisual = (scale: number, cx: number, cy: number) => {
+    const v = visual.current;
+    if (!v) return;
+    v.s = clampZoom(v.zoom0 * scale) / v.zoom0;
+    v.cx = cx;
+    v.cy = cy;
+    for (const { el, ox, oy } of v.slots) {
+      el.style.transformOrigin = `${ox}px ${oy}px`;
+      el.style.transform = `translate(${cx - v.c0x}px, ${cy - v.c0y}px) scale(${v.s})`;
+    }
+  };
+
+  const commitVisual = () => {
+    const v = visual.current;
+    if (!v) return;
+    visual.current = null;
+    anchor.current = v.anchor && { ...v.anchor, cx: v.cx, cy: v.cy };
+    clearVisual.current = true;
+    const next = clampZoom(v.zoom0 * v.s);
+    zoomRef.current = next;
+    setZoom(next);
+    setAnchorTick((t) => t + 1);
+  };
 
   /** Zoom manteniendo fijo el punto (cx, cy); sin punto, el centro del visor. */
   const zoomTo = (next: number, cx?: number, cy?: number) => {
@@ -230,13 +293,22 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
       const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025));
-      zoomToRef.current(zoomRef.current * factor, e.clientX, e.clientY);
+      if (!visualRef.current.active()) visualRef.current.begin(e.clientX, e.clientY);
+      visualRef.current.update(factor, e.clientX, e.clientY);
+      window.clearTimeout(wheelTimer.current);
+      wheelTimer.current = window.setTimeout(() => visualRef.current.commit(), 180);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
-  const zoomToRef = useRef(zoomTo);
-  zoomToRef.current = zoomTo;
+  const visualRef = useRef({
+    active: () => !!visual.current,
+    begin: beginVisual,
+    commit: commitVisual,
+    update: (factor: number, cx: number, cy: number) => updateVisual((visual.current?.s ?? 1) * factor, cx, cy),
+  });
+  visualRef.current.begin = beginVisual;
+  visualRef.current.commit = commitVisual;
 
   // --- Dos dedos (mover y pellizcar), botón central o espacio + arrastrar (mover) ---
   const center = () => {
@@ -258,9 +330,10 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
         if (!pinch.current) {
           dragPan.current = null;
           gestureAbort.current?.();
+          if (visual.current) commitVisual();
           const c = center();
-          pinch.current = { dist0: Math.max(c.d, 1), zoom0: zoomRef.current };
-          setAnchorAt(c.x, c.y);
+          pinch.current = { dist0: Math.max(c.d, 1) };
+          beginVisual(c.x, c.y);
         }
       }
       if (touches.current.size === 1 && e.target === e.currentTarget) {
@@ -291,18 +364,7 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
       if (pinch.current && touches.current.size >= 2) {
         e.stopPropagation();
         const c = center();
-        if (anchor.current) {
-          anchor.current.cx = c.x;
-          anchor.current.cy = c.y;
-        }
-        const next = clampZoom(pinch.current.zoom0 * (c.d / pinch.current.dist0));
-        // Sin cambio de zoom basta con desplazar ya; si cambia, se recoloca tras pintar el nuevo tamaño.
-        if (Math.abs(next - zoomRef.current) > 0.001) {
-          zoomRef.current = next;
-          setZoom(next);
-          // Si el zoom vuelve a su valor anterior React no repinta; el tick asegura el ajuste.
-          setAnchorTick((t) => t + 1);
-        } else applyAnchor();
+        updateVisual(c.d / pinch.current.dist0, c.x, c.y);
       }
       return;
     }
@@ -321,10 +383,8 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
       if (pinch.current) {
         e.stopPropagation();
         if (touches.current.size < 2) {
-          // Un último ajuste con la posición final de los dedos; después se suelta el ancla.
           pinch.current = null;
-          applyAnchor();
-          setAnchorTick((t) => t + 1);
+          commitVisual();
         }
       }
       return;

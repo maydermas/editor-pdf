@@ -3,6 +3,8 @@ import type { RenderTask } from 'pdfjs-dist';
 import { getDoc } from '../lib/docs';
 import type { Page } from '../types';
 
+const MAX_CANVAS_PIXELS = 6_000_000;
+
 /**
  * Pinta una página con pdf.js. Solo renderiza cuando está cerca de la vista,
  * y vuelve a pintar (con un pequeño retardo) cuando cambia la escala.
@@ -29,7 +31,10 @@ export function PageCanvas({ page, scale }: { page: Page; scale: number }) {
         const pdfPage = await getDoc(page.docId).pdf.getPage(page.index + 1);
         if (cancelled || !canvasRef.current) return;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const vp = pdfPage.getViewport({ scale: scale * dpr });
+        // Tope de píxeles: un lienzo enorme con mucho zoom agota la memoria del móvil (y Safari lo deja en blanco).
+        const base = pdfPage.getViewport({ scale: 1 });
+        const maxScale = Math.sqrt(MAX_CANVAS_PIXELS / (base.width * base.height));
+        const vp = pdfPage.getViewport({ scale: Math.min(scale * dpr, maxScale) });
         const off = document.createElement('canvas');
         off.width = Math.ceil(vp.width);
         off.height = Math.ceil(vp.height);
