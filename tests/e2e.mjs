@@ -271,7 +271,18 @@ try {
   await tp.waitForTimeout(300);
   const sl1 = await tp.locator('.viewer').evaluate((el) => el.scrollLeft);
   check('dos dedos mueven el documento', sl1 > sl0 + 40, `scrollLeft ${sl0}→${sl1}`);
-  await touch('touchStart', [[200, 420]]);
+  // Toca dentro de la parte visible de una página (no en el hueco gris entre páginas).
+  const [tapX, tapY] = await tp.evaluate(() => {
+    const v = document.querySelector('.viewer').getBoundingClientRect();
+    for (const w of document.querySelectorAll('.viewer .page-wrap')) {
+      const r = w.getBoundingClientRect();
+      const top = Math.max(r.top, v.top), bottom = Math.min(r.bottom, v.bottom);
+      const left = Math.max(r.left, v.left), right = Math.min(r.right, v.right);
+      if (bottom - top > 60 && right - left > 60) return [Math.round((left + right) / 2), Math.round((top + bottom) / 2)];
+    }
+    return [200, 420];
+  });
+  await touch('touchStart', [[tapX, tapY]]);
   await touch('touchEnd', []);
   await tp.waitForTimeout(200);
   check('tocar sin arrastrar abre un cuadro de texto', (await tp.locator('.text-editor').count()) === 1);
