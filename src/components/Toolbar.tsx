@@ -161,6 +161,7 @@ export function PropertiesBar({ tool, style, selected, onStyle, onDelete, onDupl
 
   return (
     <div className="propbar">
+      {tool === 'text' && !selected && <span className="hint">Pulsa un texto del documento para cambiarlo o borrarlo, o un hueco para escribir.</span>}
       {showColor && (
         <div className="prop" role="radiogroup" aria-label="Color">
           {COLORS.map((c) => (

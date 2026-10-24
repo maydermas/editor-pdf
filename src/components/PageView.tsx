@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Annotation, Page, TextAnn, Tool, ToolStyle } from '../types';
 import { PageCanvas } from './PageCanvas';
 import { AnnotationShape } from './AnnotationSvg';
-import { FONT_CSS, LINE_HEIGHT, bbox, canResize, resizeTo, today, translate } from '../lib/annotations';
+import { BASELINE, FONT_CSS, LINE_HEIGHT, bbox, canResize, resizeTo, today, translate } from '../lib/annotations';
+import { getTextRuns, pageRaster, pageRasterReady, runBox, sampleColors, type TextRun } from '../lib/textRuns';
 import { uid } from '../lib/id';
 
 export interface Stamp {
@@ -52,6 +53,49 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
   const outerH = (swapped ? page.width : page.height) * zoom;
   const innerW = page.width * zoom;
   const innerH = page.height * zoom;
+
+  // Texto que ya trae el PDF: se carga al elegir la herramienta Texto.
+  const [runs, setRuns] = useState<TextRun[]>([]);
+  useEffect(() => {
+    if (tool !== 'text') return;
+    let alive = true;
+    getTextRuns(page)
+      .then((r) => {
+        if (alive) setRuns(r);
+        if (r.length) pageRaster(page).catch(() => null);
+      })
+      .catch(() => alive && setRuns([]));
+    return () => {
+      alive = false;
+    };
+  }, [tool, page.docId, page.index]);
+  const replaced = new Set(page.annotations.map((a) => ('sourceKey' in a ? a.sourceKey : undefined)).filter(Boolean));
+
+  /** Tapa el texto original con su color de fondo y pone encima una copia editable con su mismo formato. */
+  const editRun = async (run: TextRun) => {
+    if (api.editingId) api.setEditing(null);
+    const box = runBox(run);
+    const canvas = pageRasterReady(page) ?? (await pageRaster(page).catch(() => null));
+    const { bg, fg } = canvas ? sampleColors(canvas, page, box) : { bg: '#ffffff', fg: '#111111' };
+    const coverId = uid('cover');
+    const text: TextAnn = {
+      id: uid('txt'),
+      type: 'text',
+      x: run.x,
+      y: run.baseline - run.fontSize * BASELINE,
+      text: run.text,
+      fontSize: Math.round(run.fontSize * 10) / 10,
+      font: run.font,
+      bold: run.bold,
+      italic: run.italic,
+      color: fg,
+      coverId,
+      sourceKey: run.key,
+    };
+    api.update(page.id, (anns) => [...anns, { id: coverId, type: 'whiteout', ...box, color: bg, width: 0, sourceKey: run.key }, text], true);
+    api.select(page.id, text.id);
+    api.setEditing(text.id);
+  };
 
   const selectedId = api.selected?.pageId === page.id ? api.selected.annId : null;
   const selected = page.annotations.find((a) => a.id === selectedId) ?? null;
@@ -154,7 +198,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       default:
         if (BOX_TOOLS.includes(tool)) {
           const id = uid('box');
-          const color = tool === 'highlight' ? (style.color === '#111827' ? '#FDE047' : style.color) : style.color;
+          const color = tool === 'highlight' ? (style.color === '#111827' ? '#FDE047' : style.color) : tool === 'whiteout' ? '#ffffff' : style.color;
           add({ id, type: tool as 'rect', x, y, w: 0, h: 0, color, width: style.width });
           gesture.current = { kind: 'create', id, x0: x, y0: y };
           capture();
@@ -283,6 +327,29 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
             onPointerUp={onUp}
             onPointerCancel={onUp}
           >
+            {tool === 'text' && (
+              <div className="text-runs">
+                {runs
+                  .filter((r) => !replaced.has(r.key))
+                  .map((r) => {
+                    const b = runBox(r);
+                    return (
+                      <button
+                        key={r.key}
+                        className="text-run"
+                        title="Editar este texto"
+                        aria-label={`Editar texto: ${r.text}`}
+                        style={{ left: b.x * zoom, top: b.y * zoom, width: b.w * zoom, height: b.h * zoom }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          editRun(r);
+                        }}
+                      />
+                    );
+                  })}
+              </div>
+            )}
             <svg className="ann-svg" viewBox={`0 0 ${page.width} ${page.height}`} width={innerW} height={innerH}>
               {page.annotations.map((a) => (
                 <AnnotationShape

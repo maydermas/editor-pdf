@@ -83,7 +83,7 @@ async function drawAnnotation(doc: PDFDocument, page: PDFPage, a: Annotation, h:
       page.drawRectangle({ x: a.x, y: h - a.y - a.h, width: a.w, height: a.h, color: hexToRgb(a.color), opacity: 0.4, blendMode: BlendMode.Multiply });
       break;
     case 'whiteout':
-      page.drawRectangle({ x: a.x, y: h - a.y - a.h, width: a.w, height: a.h, color: rgb(1, 1, 1) });
+      page.drawRectangle({ x: a.x, y: h - a.y - a.h, width: a.w, height: a.h, color: a.color ? hexToRgb(a.color) : rgb(1, 1, 1) });
       break;
     case 'rect':
       page.drawRectangle({ x: a.x, y: h - a.y - a.h, width: a.w, height: a.h, borderColor: hexToRgb(a.color), borderWidth: a.width });

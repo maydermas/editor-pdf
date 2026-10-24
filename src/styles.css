@@ -616,6 +616,7 @@ h3 {
   color: var(--muted);
 }
 .propbar {
+  position: relative;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1167,4 +1168,27 @@ h3 {
 }
 .install-help .link-btn {
   margin: 0 0 0 auto;
+}
+
+.text-runs {
+  position: absolute;
+  inset: 0;
+}
+.text-run {
+  position: absolute;
+  padding: 0;
+  border: 1px dashed transparent;
+  border-radius: 2px;
+  background: transparent;
+  cursor: text;
+}
+.text-run:hover,
+.text-run:focus-visible {
+  border-color: var(--primary);
+  background: rgba(79, 70, 229, 0.08);
+}
+@media (hover: none) {
+  .text-run {
+    border-color: rgba(79, 70, 229, 0.35);
+  }
 }

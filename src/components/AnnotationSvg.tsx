@@ -41,7 +41,7 @@ export function AnnotationShape({ a, hidden, onPointerDown, onDoubleClick }: Pro
     case 'highlight':
       return <rect {...common} x={a.x} y={a.y} width={a.w} height={a.h} fill={a.color} opacity={0.4} style={{ ...common.style, mixBlendMode: 'multiply' }} />;
     case 'whiteout':
-      return <rect {...common} x={a.x} y={a.y} width={a.w} height={a.h} fill="#fff" className="ann-whiteout" />;
+      return <rect {...common} x={a.x} y={a.y} width={a.w} height={a.h} fill={a.color || '#fff'} className="ann-whiteout" />;
     case 'rect':
       return <rect {...common} x={a.x} y={a.y} width={a.w} height={a.h} stroke={a.color} strokeWidth={a.width} fill="transparent" className="ann-stroke" />;
     case 'ellipse':

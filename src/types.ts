@@ -28,6 +28,9 @@ export interface TextAnn {
   bold: boolean;
   italic: boolean;
   color: string;
+  /** Si sustituye a un texto del PDF: id del parche que tapa el original y clave de ese texto. */
+  coverId?: string;
+  sourceKey?: string;
 }
 
 export interface InkAnn {
@@ -47,6 +50,8 @@ export interface BoxAnn {
   h: number;
   color: string;
   width: number;
+  /** Clave del texto original que tapa (solo parches de edición de texto). */
+  sourceKey?: string;
 }
 
 export interface LineAnn {
