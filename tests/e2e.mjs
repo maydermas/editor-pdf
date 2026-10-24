@@ -268,6 +268,7 @@ try {
   await touch('touchStart', [[150, 400], [250, 400]]);
   for (let i = 1; i <= 6; i++) await touch('touchMove', [[150 - i * 15, 400], [250 - i * 15, 400]]);
   await touch('touchEnd', []);
+  await tp.waitForTimeout(300);
   const sl1 = await tp.locator('.viewer').evaluate((el) => el.scrollLeft);
   check('dos dedos mueven el documento', sl1 > sl0 + 40, `scrollLeft ${sl0}→${sl1}`);
   await touch('touchStart', [[200, 420]]);

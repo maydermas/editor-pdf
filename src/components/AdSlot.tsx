@@ -18,11 +18,14 @@ function loadAdsense() {
   document.head.appendChild(s);
 }
 
+/** Con `?anuncios=demo` en la dirección se ven cajas grises donde irán los anuncios. */
+const DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).get('anuncios') === 'demo';
+
 /**
  * Bloque de anuncio de AdSense. No muestra nada hasta que se rellene
  * `adsense.client` y el id del bloque en site.config.json.
  */
-export function AdSlot({ slot }: { slot: keyof typeof ADSENSE.slots }) {
+export function AdSlot({ slot, className = 'container' }: { slot: keyof typeof ADSENSE.slots; className?: string }) {
   const ref = useRef<HTMLModElement>(null);
   const id = ADSENSE.slots[slot];
   useEffect(() => {
@@ -34,9 +37,17 @@ export function AdSlot({ slot }: { slot: keyof typeof ADSENSE.slots }) {
       /* el bloqueador de anuncios puede impedirlo */
     }
   }, [id]);
-  if (!ADSENSE.client || !id) return null;
+  if (!ADSENSE.client || !id) {
+    if (!DEMO) return null;
+    return (
+      <div className={`ad-wrap ${className}`} aria-label="Publicidad">
+        <span className="ad-label">Publicidad</span>
+        <div className="ad-demo">Anuncio «{slot}»</div>
+      </div>
+    );
+  }
   return (
-    <div className="ad-wrap container" aria-label="Publicidad">
+    <div className={`ad-wrap ${className}`} aria-label="Publicidad">
       <span className="ad-label">Publicidad</span>
       <ins
         ref={ref}

@@ -10,6 +10,7 @@ import { Sidebar } from './Sidebar';
 import { PropertiesBar, SHORTCUTS, Toolbar } from './Toolbar';
 import { SignatureModal } from './SignatureModal';
 import { ExportModal } from './ExportModal';
+import { AdSlot } from './AdSlot';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
 
@@ -51,6 +52,14 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
   const [showSignature, setShowSignature] = useState(!!intent.openSignature);
   const [exportFormat, setExportFormat] = useState<ExportFormat | null>(intent.exportFormat ?? null);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760);
+  // La columna de publicidad solo cabe en pantallas anchas; en el resto no se carga.
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1280px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1280px)');
+    const on = () => setWide(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   const [toast, setToast] = useState<string | null>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
@@ -181,7 +190,7 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
   };
 
   // Tras cada cambio de zoom (o de posición de los dedos), recoloca el scroll para que el punto anclado no se mueva.
-  useLayoutEffect(() => {
+  const applyAnchor = () => {
     const a = anchor.current;
     const v = mainRef.current;
     if (!a || !v) return;
@@ -190,6 +199,9 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
     const r = w.getBoundingClientRect();
     v.scrollLeft += r.left + a.fx * r.width - a.cx;
     v.scrollTop += r.top + a.fy * r.height - a.cy;
+  };
+  useLayoutEffect(() => {
+    applyAnchor();
     if (!pinch.current) anchor.current = null;
   }, [zoom, anchorTick]);
 
@@ -234,6 +246,11 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
 
   const onViewerPointerDown = (e: React.PointerEvent) => {
     if (e.pointerType === 'touch') {
+      // El primer dedo de un gesto nuevo: olvida dedos de gestos anteriores cuyo «soltar» no llegó.
+      if (e.isPrimary) {
+        touches.current.clear();
+        pinch.current = null;
+      }
       touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (touches.current.size >= 2) {
         e.stopPropagation();
@@ -279,8 +296,13 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
           anchor.current.cy = c.y;
         }
         const next = clampZoom(pinch.current.zoom0 * (c.d / pinch.current.dist0));
-        if (Math.abs(next - zoomRef.current) > 0.001) setZoom(next);
-        setAnchorTick((t) => t + 1);
+        // Sin cambio de zoom basta con desplazar ya; si cambia, se recoloca tras pintar el nuevo tamaño.
+        if (Math.abs(next - zoomRef.current) > 0.001) {
+          zoomRef.current = next;
+          setZoom(next);
+          // Si el zoom vuelve a su valor anterior React no repinta; el tick asegura el ajuste.
+          setAnchorTick((t) => t + 1);
+        } else applyAnchor();
       }
       return;
     }
@@ -301,6 +323,7 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
         if (touches.current.size < 2) {
           // Un último ajuste con la posición final de los dedos; después se suelta el ancla.
           pinch.current = null;
+          applyAnchor();
           setAnchorTick((t) => t + 1);
         }
       }
@@ -555,6 +578,7 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
             <PageView key={p.id} page={p} number={i + 1} api={api} />
           ))}
         </main>
+        {wide && <AdSlot slot="editorSide" className="ad-rail" />}
       </div>
 
       <input

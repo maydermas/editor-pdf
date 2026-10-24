@@ -14,7 +14,9 @@
     "slots": {
       "homeTop": "",
       "homeBottom": "",
-      "article": ""
+      "article": "",
+      "editorSide": "",
+      "exportDone": ""
     }
   }
 }
