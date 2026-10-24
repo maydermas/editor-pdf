@@ -580,6 +580,7 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
         </main>
         {wide && <AdSlot slot="editorSide" className="ad-rail" />}
       </div>
+      {!wide && <AdSlot slot="editorMobile" className="ad-strip" size={[320, 50]} />}
 
       <input
         ref={imageRef}

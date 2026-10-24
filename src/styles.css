@@ -471,6 +471,27 @@ h3 {
   background: var(--surface);
   border-left: 1px solid var(--border);
 }
+/* Franja fija bajo el documento en móviles y tabletas: no tapa la página, la empuja hacia arriba. */
+.ad-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 0;
+  height: 50px;
+  padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+  box-sizing: content-box;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  overflow: hidden;
+}
+.ad-strip .ad-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  margin: 0;
+  font-size: 9px;
+}
 /* Separado de los botones para evitar clics sin querer. */
 .ad-modal {
   width: 100%;
@@ -1182,6 +1203,16 @@ h3 {
     gap: 10px;
     flex-wrap: nowrap;
     overflow-x: auto;
+  }
+  /* La ayuda va en una línea propia; si no, se queda en una columna estrecha de muchas líneas. */
+  .propbar:has(> .hint) {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .propbar > .hint {
+    flex: 0 0 100%;
+    font-size: 12px;
+    line-height: 1.35;
   }
   .prop-end {
     margin-left: 0;

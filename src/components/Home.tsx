@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { Logo } from './Logo';
 import { useInstall } from '../lib/pwa';
 import { AdSlot } from './AdSlot';
+import { herramientas } from '../../content/herramientas.mjs';
 
 interface ToolCard {
   label: string;
@@ -304,6 +305,13 @@ export function Home({ onOpen }: Props) {
           <span className="muted">
             © {new Date().getFullYear()} {BRAND.name}. Tus documentos se procesan en tu navegador.
           </span>
+          <nav className="foot-links" aria-label="Lo más buscado">
+            {herramientas.map((h) => (
+              <a key={h.slug} href={`./${h.slug}/`}>
+                {h.enlace}
+              </a>
+            ))}
+          </nav>
           <nav className="foot-links" aria-label="Información">
             <a href="./guias/">Guías</a>
             <a href="./sobre-nosotros/">Sobre nosotros</a>
