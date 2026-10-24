@@ -1009,6 +1009,10 @@ h3 {
   gap: 8px;
   margin-top: 20px;
 }
+.modal-actions-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
 .export-form fieldset {
   border: 0;
   margin: 0 0 16px;

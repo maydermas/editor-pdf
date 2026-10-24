@@ -19,7 +19,8 @@ export function ExportModal({ pages, fileName, initialFormat = 'pdf', onClose }:
   const [format, setFormat] = useState<ExportFormat>(initialFormat);
   const [range, setRange] = useState('');
   const [split, setSplit] = useState(false);
-  const [name, setName] = useState(fileName.replace(/\.[a-z0-9]+$/i, ''));
+  // Con otro nombre que el original: en el móvil es fácil abrir el archivo antiguo creyendo que es el nuevo.
+  const [name, setName] = useState(editedName(fileName));
   const [quality, setQuality] = useState(0.7);
   const [phase, setPhase] = useState<Phase>({ kind: 'form' });
 
@@ -40,7 +41,8 @@ export function ExportModal({ pages, fileName, initialFormat = 'pdf', onClose }:
         quality,
         onProgress: (msg) => setPhase({ kind: 'working', msg }),
       });
-      downloadBlob(result);
+      // En el móvil se descarga o comparte al pulsar (iOS no deja descargar sin un toque del usuario).
+      if (!isMobile()) downloadBlob(result);
       setPhase({ kind: 'done', result });
     } catch (e) {
       console.error(e);
@@ -126,16 +128,35 @@ export function ExportModal({ pages, fileName, initialFormat = 'pdf', onClose }:
             <Icon name="check" size={28} />
           </div>
           <p>
-            <strong>{phase.result.fileName}</strong> está listo ({(phase.result.blob.size / 1024).toFixed(0)} KB).
+            <strong>{phase.result.fileName}</strong> está listo con tus cambios ({(phase.result.blob.size / 1024).toFixed(0)} KB).
           </p>
-          <div className="modal-actions">
-            <button className="btn btn-ghost" onClick={() => downloadBlob(phase.result)}>
-              Descargar de nuevo
-            </button>
-            <button className="btn btn-primary" onClick={onClose}>
-              Seguir editando
-            </button>
-          </div>
+          {isMobile() ? (
+            <div className="modal-actions modal-actions-stack">
+              {canShare(phase.result) && (
+                <button className="btn btn-primary" onClick={() => shareResult(phase.result)}>
+                  <Icon name="download" size={18} /> Guardar o compartir
+                </button>
+              )}
+              <button className={`btn ${canShare(phase.result) ? 'btn-ghost' : 'btn-primary'}`} onClick={() => downloadBlob(phase.result)}>
+                Descargar
+              </button>
+              <button className="btn btn-ghost" onClick={() => openResult(phase.result)}>
+                Ver el archivo
+              </button>
+              <button className="btn btn-ghost" onClick={onClose}>
+                Seguir editando
+              </button>
+            </div>
+          ) : (
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => downloadBlob(phase.result)}>
+                Descargar de nuevo
+              </button>
+              <button className="btn btn-primary" onClick={onClose}>
+                Seguir editando
+              </button>
+            </div>
+          )}
           <AdSlot slot="exportDone" className="ad-modal" />
         </div>
       )}
@@ -152,4 +173,35 @@ export function ExportModal({ pages, fileName, initialFormat = 'pdf', onClose }:
       )}
     </Modal>
   );
+}
+
+/** «contrato.pdf» → «contrato-editado». */
+export function editedName(fileName: string) {
+  const base = fileName.replace(/\.[a-z0-9]+$/i, '');
+  return /-editado$/i.test(base) ? base : `${base}-editado`;
+}
+
+const isMobile = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+
+const asFile = (r: ExportResult) => new File([r.blob], r.fileName, { type: r.blob.type });
+
+function canShare(r: ExportResult) {
+  try {
+    return typeof navigator.canShare === 'function' && navigator.canShare({ files: [asFile(r)] });
+  } catch {
+    return false;
+  }
+}
+
+/** Menú de compartir del sistema: en el iPhone permite «Guardar en Archivos», WhatsApp, correo… */
+function shareResult(r: ExportResult) {
+  navigator.share({ files: [asFile(r)] }).catch((e: Error) => {
+    if (e.name !== 'AbortError') downloadBlob(r);
+  });
+}
+
+function openResult(r: ExportResult) {
+  const url = URL.createObjectURL(r.blob);
+  if (!window.open(url, '_blank')) location.assign(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
