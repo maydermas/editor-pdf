@@ -27,7 +27,8 @@ export type FontFamily =
   | 'opensans'
   | 'lato'
   | 'montserrat'
-  | 'poppins';
+  | 'poppins'
+  | 'verdana';
 
 export interface TextAnn {
   id: string;
@@ -48,6 +49,11 @@ export interface TextAnn {
    * Solo se redibuja lo que cambió; el resto de la línea sigue siendo el texto original del PDF.
    */
   keep?: [number, number];
+  /**
+   * Estiramiento horizontal para que la letra parecida ocupe lo mismo que la original del PDF
+   * (p. ej. un DNI o un importe escrito con una letra más ancha). 1 o sin definir: sin estirar.
+   */
+  scaleX?: number;
 }
 
 export interface InkAnn {

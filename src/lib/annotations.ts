@@ -9,12 +9,16 @@ export const BASELINE = 0.95;
 export const NOTE_SIZE = 22;
 
 let measureCtx: CanvasRenderingContext2D | null = null;
-export function measureText(t: Pick<TextAnn, 'font' | 'fontSize' | 'bold' | 'italic'>, line: string): number {
+export function measureText(t: Pick<TextAnn, 'font' | 'fontSize' | 'bold' | 'italic' | 'scaleX'>, line: string): number {
   measureCtx ??= document.createElement('canvas').getContext('2d');
-  if (!measureCtx) return line.length * t.fontSize * 0.55;
+  const sx = t.scaleX ?? 1;
+  if (!measureCtx) return line.length * t.fontSize * 0.55 * sx;
   measureCtx.font = `${t.italic ? 'italic ' : ''}${t.bold ? 'bold ' : ''}${t.fontSize}px ${FONT_CSS[t.font]}`;
-  return measureCtx.measureText(line).width;
+  return measureCtx.measureText(line).width * sx;
 }
+
+/** Transformación SVG que estira el texto en horizontal sin moverlo de su x. */
+export const stretch = (a: Pick<TextAnn, 'x' | 'scaleX'>) => (a.scaleX && a.scaleX !== 1 ? `matrix(${a.scaleX} 0 0 1 ${a.x * (1 - a.scaleX)} 0)` : undefined);
 
 export interface Box {
   x: number;

@@ -109,6 +109,27 @@ export function charX(r: TextRun, idx: number, measure: (s: string) => number): 
   return r.x + r.width;
 }
 
+/**
+ * Cuánto hay que estirar en horizontal la letra parecida para que ocupe lo mismo que la original.
+ * Se calcula con los trozos sin espacios (los espacios pueden venir ensanchados por el justificado);
+ * si todos llevan espacios, solo se permite estrechar. Devuelve undefined si no hace falta.
+ */
+export function fitScale(r: TextRun, measure: (s: string) => number): number | undefined {
+  const ratios: number[] = [];
+  const spaced: number[] = [];
+  for (const seg of r.segs) {
+    const str = r.text.slice(seg.start, seg.end).trim();
+    const m = measure(str);
+    if (str.length < 2 || m <= 0) continue;
+    (/\s/.test(str) ? spaced : ratios).push(seg.w / m);
+  }
+  const pick = ratios.length ? ratios : spaced.map((v) => Math.min(1, v));
+  if (!pick.length) return undefined;
+  pick.sort((a, b) => a - b);
+  const k = Math.min(1.5, Math.max(0.7, pick[Math.floor(pick.length / 2)]));
+  return Math.abs(k - 1) < 0.03 ? undefined : Math.round(k * 1000) / 1000;
+}
+
 /** Caja que cubre un texto existente (con un pequeño margen para tapar del todo las letras). */
 export function runBox(r: TextRun, others: TextRun[] = []) {
   const pad = Math.max(0.6, r.fontSize * 0.06);
