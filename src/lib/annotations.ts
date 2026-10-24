@@ -17,6 +17,15 @@ export function measureText(t: Pick<TextAnn, 'font' | 'fontSize' | 'bold' | 'ita
   return measureCtx.measureText(line).width * sx;
 }
 
+/** Altura de la tinta de un texto sobre su línea base (lo que sube la letra más alta). */
+export function measureAscent(t: Pick<TextAnn, 'font' | 'fontSize' | 'bold' | 'italic'>, line: string): number {
+  measureCtx ??= document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return t.fontSize * 0.72;
+  // A 100 px y luego a escala: a tamaños pequeños el navegador redondea la medida a píxeles enteros.
+  measureCtx.font = `${t.italic ? 'italic ' : ''}${t.bold ? 'bold ' : ''}100px ${FONT_CSS[t.font]}`;
+  return (measureCtx.measureText(line).actualBoundingBoxAscent * t.fontSize) / 100;
+}
+
 /** Transformación SVG que estira el texto en horizontal sin moverlo de su x. */
 export const stretch = (a: Pick<TextAnn, 'x' | 'scaleX'>) => (a.scaleX && a.scaleX !== 1 ? `matrix(${a.scaleX} 0 0 1 ${a.x * (1 - a.scaleX)} 0)` : undefined);
 
