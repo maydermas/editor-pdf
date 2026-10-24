@@ -25,7 +25,16 @@ const DEMO = typeof location !== 'undefined' && new URLSearchParams(location.sea
  * Bloque de anuncio de AdSense. No muestra nada hasta que se rellene
  * `adsense.client` y el id del bloque en site.config.json.
  */
-export function AdSlot({ slot, className = 'container' }: { slot: keyof typeof ADSENSE.slots; className?: string }) {
+export function AdSlot({
+  slot,
+  className = 'container',
+  size,
+}: {
+  slot: keyof typeof ADSENSE.slots;
+  className?: string;
+  /** Tamaño fijo en píxeles (ancho, alto). Sin él, el anuncio es adaptable. */
+  size?: [number, number];
+}) {
   const ref = useRef<HTMLModElement>(null);
   const id = ADSENSE.slots[slot];
   useEffect(() => {
@@ -42,7 +51,9 @@ export function AdSlot({ slot, className = 'container' }: { slot: keyof typeof A
     return (
       <div className={`ad-wrap ${className}`} aria-label="Publicidad">
         <span className="ad-label">Publicidad</span>
-        <div className="ad-demo">Anuncio «{slot}»</div>
+        <div className="ad-demo" style={size && { width: size[0], height: size[1], minHeight: 0 }}>
+          Anuncio «{slot}»
+        </div>
       </div>
     );
   }
@@ -52,11 +63,10 @@ export function AdSlot({ slot, className = 'container' }: { slot: keyof typeof A
       <ins
         ref={ref}
         className="adsbygoogle"
-        style={{ display: 'block' }}
+        style={size ? { display: 'inline-block', width: size[0], height: size[1] } : { display: 'block' }}
         data-ad-client={ADSENSE.client}
         data-ad-slot={id}
-        data-ad-format="auto"
-        data-full-width-responsive="true"
+        {...(size ? {} : { 'data-ad-format': 'auto', 'data-full-width-responsive': 'true' })}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { guias } from '../content/guias.mjs';
 import { legales } from '../content/legales.mjs';
+import { herramientas } from '../content/herramientas.mjs';
 
 const site = JSON.parse(readFileSync('site.config.json', 'utf8'));
 const DIST = 'dist';
@@ -69,6 +70,9 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script
 </div></header>
 <main class="container article">${content}</main>
 <footer class="site-foot"><div class="container">
+  <nav class="foot-links foot-tools" aria-label="Lo más buscado">
+    ${herramientas.map((h) => `<a href="${prefix}${h.slug}/">${esc(h.enlace)}</a>`).join('\n    ')}
+  </nav>
   <nav class="foot-links">
     <a href="${prefix}guias/">Guías</a>
     ${LEGAL_LINKS.map(([s, t]) => `<a href="${prefix}${s}/">${t}</a>`).join('\n    ')}
@@ -123,6 +127,40 @@ ${adBlock('article')}
   );
 }
 
+// Páginas para búsquedas concretas
+for (const h of herramientas) {
+  const otras = herramientas.filter((o) => o.slug !== h.slug);
+  write(
+    h.slug,
+    layout({
+      prefix: '../',
+      path: `${h.slug}/`,
+      title: h.title,
+      description: fill(h.description),
+      jsonLd: {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: h.faq.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+      },
+      content: `
+<p class="crumbs"><a href="../">Inicio</a></p>
+<h1>${esc(h.title)}</h1>
+<p class="lead">${esc(fill(h.description))}</p>
+<p><a class="btn btn-big" href="../">Abrir el editor gratis</a></p>
+<h2>Cómo hacerlo</h2>
+<ol class="steps">${h.pasos.map((p) => `<li>${p}</li>`).join('')}</ol>
+${adBlock('article')}
+${fill(h.body)}
+<div class="cta"><strong>Listo en un minuto</strong><span>Gratis, sin registro y sin subir tus archivos.</span><a class="btn" href="../">Abrir el editor</a></div>
+<h2>Preguntas frecuentes</h2>
+${h.faq.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('\n')}
+${adBlock('article')}
+<h2>También te puede servir</h2>
+<ul class="related">${otras.map((o) => `<li><a href="../${o.slug}/">${esc(o.title)}</a></li>`).join('')}</ul>`,
+    }),
+  );
+}
+
 // Índice de guías
 write(
   'guias',
@@ -136,6 +174,8 @@ write(
 <h1>Guías para trabajar con PDF</h1>
 <p class="lead">Explicaciones paso a paso para las tareas más habituales con documentos PDF.</p>
 <div class="cards">${guias.map((g) => `<a class="card" href="./${g.slug}/"><strong>${esc(g.title)}</strong><span>${esc(fill(g.description))}</span></a>`).join('')}</div>
+<h2>Lo más buscado</h2>
+<div class="cards">${herramientas.map((h) => `<a class="card" href="../${h.slug}/"><strong>${esc(h.title)}</strong><span>${esc(fill(h.description))}</span></a>`).join('')}</div>
 ${adBlock('article')}`,
   }),
 );
@@ -172,13 +212,13 @@ li{margin:6px 0}code{background:var(--alt);padding:1px 6px;border-radius:5px;fon
 .card{display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:12px;padding:18px;text-decoration:none;color:var(--text)}.card:hover{border-color:#c7d2fe}.card span{color:var(--muted);font-size:14px}
 .table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}th{background:var(--alt)}
 .big-contact{font-size:22px;font-weight:700}.ad-wrap{margin:28px 0;min-height:100px}.ad-label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
-.site-foot{border-top:1px solid var(--border);padding-block:24px;font-size:14px;color:var(--muted)}.foot-links{display:flex;flex-wrap:wrap;gap:8px 18px}.foot-links a{color:var(--muted)}
+.site-foot{border-top:1px solid var(--border);padding-block:24px;font-size:14px;color:var(--muted)}.foot-tools{margin-bottom:10px}.btn-big{font-size:16px;padding:12px 22px}.steps li{margin:8px 0}h3{font-size:18px;margin:22px 0 6px}.foot-links{display:flex;flex-wrap:wrap;gap:8px 18px}.foot-links a{color:var(--muted)}
 @media (max-width:640px){.nav{display:none}.row{justify-content:space-between}}
 `,
 );
 
 // sitemap, robots y ads.txt
-const urls = ['', 'guias/', ...guias.map((g) => `guias/${g.slug}/`), ...legales.map((l) => `${l.slug}/`)];
+const urls = ['', 'guias/', ...herramientas.map((h) => `${h.slug}/`), ...guias.map((g) => `guias/${g.slug}/`), ...legales.map((l) => `${l.slug}/`)];
 writeFileSync(
   join(DIST, 'sitemap.xml'),
   `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${base}/${u}</loc><lastmod>${today}</lastmod></url>`).join('\n')}\n</urlset>\n`,
