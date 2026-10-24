@@ -187,6 +187,39 @@ try {
   check('rango inválido bloquea la descarga', await page.getByRole('button', { name: /Descargar/ }).isDisabled());
   await page.keyboard.press('Escape');
 
+  // Arrastrar con el ratón (herramienta Texto) mueve el documento y no crea texto.
+  await page.getByRole('button', { name: /^Texto/ }).click();
+  await page.locator('.viewer').evaluate((el) => (el.scrollTop = 0));
+  const annsBefore = await page.locator('.viewer [data-ann]').count();
+  const ov = await page.locator('.page-overlay').first().boundingBox();
+  await page.mouse.move(ov.x + 300, ov.y + 400);
+  await page.mouse.down();
+  await page.mouse.move(ov.x + 300, ov.y + 150, { steps: 8 });
+  await page.mouse.up();
+  const scrolled = await page.locator('.viewer').evaluate((el) => el.scrollTop);
+  check('arrastrar con el ratón mueve el documento', scrolled > 200 && (await page.locator('.viewer [data-ann]').count()) === annsBefore, `scrollTop=${scrolled}`);
+
+  // Ctrl + rueda: amplía manteniendo el punto bajo el ratón.
+  const wrap0 = await page.locator('.page-wrap').first().boundingBox();
+  const mx = wrap0.x + wrap0.width * 0.7;
+  const my = Math.max(wrap0.y, 250) + 50;
+  const fx = (mx - wrap0.x) / wrap0.width;
+  const fy = (my - wrap0.y) / wrap0.height;
+  await page.mouse.move(mx, my);
+  await page.keyboard.down('Control');
+  for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -100);
+  await page.keyboard.up('Control');
+  await page.waitForTimeout(300);
+  const wrap1 = await page.locator('.page-wrap').first().boundingBox();
+  const driftX = wrap1.x + fx * wrap1.width - mx;
+  const driftY = wrap1.y + fy * wrap1.height - my;
+  check('Ctrl + rueda amplía donde está el ratón', wrap1.width > wrap0.width * 1.5 && Math.abs(driftX) < 6 && Math.abs(driftY) < 6, `ancho ${Math.round(wrap0.width)}→${Math.round(wrap1.width)}, desvío ${Math.round(driftX)},${Math.round(driftY)}`);
+  const leftReachable = await page.locator('.viewer').evaluate((el) => {
+    el.scrollLeft = 0;
+    return el.querySelector('.page-wrap').getBoundingClientRect().left >= el.getBoundingClientRect().left;
+  });
+  check('con mucho zoom se llega al borde izquierdo de la página', leftReachable);
+
   // Móvil
   const m = await browser.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 2 });
   const mp = await m.newPage();
@@ -205,6 +238,44 @@ try {
     return wide ? wide.className || wide.tagName : 'desconocido';
   });
   check('editor sin scroll horizontal en móvil', !mOverflow, String(mOverflow));
+
+  // Táctil: un dedo arrastra el documento; dos dedos pellizcan para ampliar.
+  const t = await browser.newContext({ viewport: { width: 375, height: 667 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  const tp = await t.newPage();
+  tp.on('pageerror', (e) => errors.push(String(e)));
+  await tp.goto(`http://localhost:${PORT}/`);
+  await tp.setInputFiles('[data-testid="file-input"]', srcPath);
+  await tp.waitForSelector('.page-slot');
+  await tp.waitForTimeout(800);
+  const cdp = await t.newCDPSession(tp);
+  const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })) });
+  const tw0 = await tp.locator('.page-wrap').first().boundingBox();
+  await touch('touchStart', [[190, 450]]);
+  for (let i = 1; i <= 6; i++) await touch('touchMove', [[190, 450 - i * 40]]);
+  await touch('touchEnd', []);
+  const tScroll = await tp.locator('.viewer').evaluate((el) => el.scrollTop);
+  check('un dedo arrastra el documento sin escribir', tScroll > 150 && (await tp.locator('.viewer [data-ann]').count()) === 0, `scrollTop=${tScroll}`);
+  await touch('touchStart', [[150, 400]]);
+  await touch('touchStart', [[150, 400], [230, 400]]);
+  for (let i = 1; i <= 8; i++) await touch('touchMove', [[150 - i * 10, 400], [230 + i * 10, 400]]);
+  await touch('touchEnd', []);
+  await tp.waitForTimeout(300);
+  const tw1 = await tp.locator('.page-wrap').first().boundingBox();
+  check('pellizcar con dos dedos amplía', tw1.width > tw0.width * 1.6, `${Math.round(tw0.width)}→${Math.round(tw1.width)}`);
+  check('el pellizco no deja marcas en la página', (await tp.locator('.viewer [data-ann], .text-editor').count()) === 0);
+  const sl0 = await tp.locator('.viewer').evaluate((el) => el.scrollLeft);
+  await touch('touchStart', [[150, 400]]);
+  await touch('touchStart', [[150, 400], [250, 400]]);
+  for (let i = 1; i <= 6; i++) await touch('touchMove', [[150 - i * 15, 400], [250 - i * 15, 400]]);
+  await touch('touchEnd', []);
+  const sl1 = await tp.locator('.viewer').evaluate((el) => el.scrollLeft);
+  check('dos dedos mueven el documento', sl1 > sl0 + 40, `scrollLeft ${sl0}→${sl1}`);
+  await touch('touchStart', [[200, 420]]);
+  await touch('touchEnd', []);
+  await tp.waitForTimeout(200);
+  check('tocar sin arrastrar abre un cuadro de texto', (await tp.locator('.text-editor').count()) === 1);
+  await tp.screenshot({ path: join(OUT, 'editor-375-zoom.png') });
+  await t.close();
 
   check('sin errores de JavaScript', errors.length === 0, errors.join(' | '));
 } catch (e) {

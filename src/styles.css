@@ -772,10 +772,23 @@ h3 {
   padding: 24px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Con «center» la parte izquierda de una página ampliada quedaría fuera de alcance. */
+  align-items: flex-start;
   gap: 8px;
+  touch-action: none;
+  cursor: grab;
+  overscroll-behavior: contain;
+}
+.viewer.is-panning,
+.viewer.is-panning .page-overlay {
+  cursor: grab !important;
+}
+.viewer.is-panning .page-overlay * {
+  pointer-events: none;
 }
 .page-slot {
+  margin-inline: auto;
+  cursor: default;
   display: flex;
   flex-direction: column;
   align-items: center;
