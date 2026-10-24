@@ -109,6 +109,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
   const selectedId = api.selected?.pageId === page.id ? api.selected.annId : null;
   const selected = page.annotations.find((a) => a.id === selectedId) ?? null;
   const editing = page.annotations.find((a) => a.id === api.editingId) ?? null;
+  const inputScale = editing?.type === 'text' ? Math.min(1, (editing.fontSize * zoom) / 16) : 1;
 
   /** Pasa de coordenadas de pantalla a puntos PDF de la página (deshaciendo zoom y rotación). */
   const toLocal = (clientX: number, clientY: number): [number, number] => {
@@ -342,7 +343,8 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
   useEffect(() => {
     const el = textRef.current;
     if (el && editing?.type === 'text') {
-      el.focus();
+      // Sin preventScroll, Safari desplaza la página al dar el foco y el texto parece «saltar».
+      el.focus({ preventScroll: true });
       el.setSelectionRange(el.value.length, el.value.length);
     }
   }, [editing?.id]);
@@ -460,9 +462,14 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
                 style={{
                   left: editing.x * zoom,
                   top: editing.y * zoom,
-                  width: Math.max(60, bbox(editing).w * zoom + editing.fontSize * zoom * 2),
-                  height: editing.text.split('\n').length * editing.fontSize * LINE_HEIGHT * zoom + 2,
-                  fontSize: editing.fontSize * zoom,
+                  // El iPhone amplía toda la página al escribir en un campo con letra de menos de 16 px.
+                  // Se escribe a 16 px y se reduce con transform: se ve igual y no hay zoom.
+                  width: Math.max(60, bbox(editing).w * zoom + editing.fontSize * zoom * 2) / inputScale,
+                  height: (editing.text.split('\n').length * editing.fontSize * LINE_HEIGHT * zoom + 2) / inputScale,
+                  fontSize: (editing.fontSize * zoom) / inputScale,
+                  transform: inputScale < 1 ? `scale(${inputScale})` : undefined,
+                  transformOrigin: '0 0',
+                  borderWidth: 1 / inputScale,
                   fontFamily: FONT_CSS[editing.font],
                   fontWeight: editing.bold ? 700 : 400,
                   fontStyle: editing.italic ? 'italic' : 'normal',

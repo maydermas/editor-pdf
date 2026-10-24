@@ -23,7 +23,16 @@ export function PageCanvas({ page, scale }: { page: Page; scale: number }) {
   }, []);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      // Fuera de la vista se suelta la imagen: el iPhone tiene un tope de memoria para todos los lienzos juntos
+      // y, si se pasa, los deja en blanco.
+      const c = canvasRef.current;
+      if (c && c.width > 1) {
+        c.width = 1;
+        c.height = 1;
+      }
+      return;
+    }
     let task: RenderTask | null = null;
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -45,6 +54,8 @@ export function PageCanvas({ page, scale }: { page: Page; scale: number }) {
         c.width = off.width;
         c.height = off.height;
         c.getContext('2d')!.drawImage(off, 0, 0);
+        off.width = 0;
+        off.height = 0;
       } catch (e) {
         if ((e as { name?: string })?.name !== 'RenderingCancelledException' && !cancelled) setError(true);
       }

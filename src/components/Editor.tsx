@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Annotation, ExportFormat, Intent, Page, Tool, ToolStyle } from '../types';
+import type { Annotation, ExportFormat, FontFamily, Intent, Page, Tool, ToolStyle } from '../types';
 import { useHistory } from '../lib/useHistory';
 import { uid } from '../lib/id';
 import { translate } from '../lib/annotations';
@@ -11,6 +11,8 @@ import { PropertiesBar, SHORTCUTS, Toolbar } from './Toolbar';
 import { SignatureModal } from './SignatureModal';
 import { ExportModal } from './ExportModal';
 import { AdSlot } from './AdSlot';
+import { loadFont } from '../lib/fonts';
+import { getTextRuns } from '../lib/textRuns';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
 
@@ -61,6 +63,32 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
     return () => mq.removeEventListener('change', on);
   }, []);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Al abrir un documento, la letra por defecto pasa a ser la que más usa (Calibri, Times…).
+  const firstPage = pages[0];
+  useEffect(() => {
+    if (!firstPage) return;
+    let cancelled = false;
+    getTextRuns(firstPage)
+      .then((runs) => {
+        const weight = new Map<FontFamily, number>();
+        for (const r of runs) weight.set(r.font, (weight.get(r.font) ?? 0) + r.text.length);
+        const best = [...weight].sort((a, b) => b[1] - a[1])[0]?.[0];
+        if (best && !cancelled) setStyle((s) => ({ ...s, font: best }));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstPage?.docId]);
+
+  // Descarga las tipografías que se están usando y vuelve a medir los textos cuando llegan.
+  const [, setFontsReady] = useState(0);
+  const usedFonts = [...new Set([style.font, ...pages.flatMap((p) => p.annotations.flatMap((a) => (a.type === 'text' ? [a.font] : [])))])].sort().join(',');
+  useEffect(() => {
+    for (const f of usedFonts.split(',') as FontFamily[]) loadFont(f).then(() => setFontsReady((n) => n + 1));
+  }, [usedFonts]);
   const mainRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const clipboard = useRef<Annotation | null>(null);

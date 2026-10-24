@@ -17,6 +17,8 @@ import { zipSync } from 'fflate';
 import { PDFJS_OPTIONS, getDoc } from './docs';
 import { BASELINE, LINE_HEIGHT, NOTE_SIZE, arrowHead, inkPath, markPath } from './annotations';
 import { apply, displayUpToPdf, type Matrix } from './matrix';
+import { FONTS, fontUrl } from './fonts';
+import fontkit from '@pdf-lib/fontkit';
 import type { Annotation, ExportFormat, FontFamily, Page, TextAnn } from '../types';
 
 const hexToRgb = (hex: string) => {
@@ -24,20 +26,30 @@ const hexToRgb = (hex: string) => {
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 };
 
-const FONT_KEYS: Record<FontFamily, [StandardFonts, StandardFonts, StandardFonts, StandardFonts]> = {
+const FONT_KEYS: Partial<Record<FontFamily, [StandardFonts, StandardFonts, StandardFonts, StandardFonts]>> = {
   helvetica: [StandardFonts.Helvetica, StandardFonts.HelveticaBold, StandardFonts.HelveticaOblique, StandardFonts.HelveticaBoldOblique],
   times: [StandardFonts.TimesRoman, StandardFonts.TimesRomanBold, StandardFonts.TimesRomanItalic, StandardFonts.TimesRomanBoldItalic],
   courier: [StandardFonts.Courier, StandardFonts.CourierBold, StandardFonts.CourierOblique, StandardFonts.CourierBoldOblique],
 };
 
 class FontCache {
-  private cache = new Map<string, PDFFont>();
+  private cache = new Map<string, Promise<PDFFont>>();
   constructor(private doc: PDFDocument) {}
-  async get(t: TextAnn) {
-    const key = FONT_KEYS[t.font][(t.bold ? 1 : 0) + (t.italic ? 2 : 0)];
+  get(t: TextAnn) {
+    const std = FONT_KEYS[t.font];
+    const file = FONTS[t.font].file;
+    const key = std ? std[(t.bold ? 1 : 0) + (t.italic ? 2 : 0)] : `${t.font}-${t.bold}-${t.italic}`;
     let f = this.cache.get(key);
     if (!f) {
-      f = await this.doc.embedFont(key);
+      f = std
+        ? this.doc.embedFont(std[(t.bold ? 1 : 0) + (t.italic ? 2 : 0)])
+        : (async () => {
+            // Fuentes libres: se incrustan solo las letras usadas.
+            this.doc.registerFontkit(fontkit);
+            const res = await fetch(fontUrl(file!, t.bold, t.italic));
+            if (!res.ok) return this.doc.embedFont(StandardFonts.Helvetica);
+            return this.doc.embedFont(new Uint8Array(await res.arrayBuffer()), { subset: true });
+          })();
       this.cache.set(key, f);
     }
     return f;
