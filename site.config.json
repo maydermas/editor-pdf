@@ -1,0 +1,20 @@
+{
+  "name": "Editor PDF",
+  "siteUrl": "https://www.tu-dominio.com",
+  "supportEmail": "contacto@tu-dominio.com",
+  "maxUploadMB": 100,
+  "owner": {
+    "name": "NOMBRE Y APELLIDOS DEL TITULAR",
+    "taxId": "",
+    "address": "DIRECCIÓN POSTAL COMPLETA",
+    "country": "España"
+  },
+  "adsense": {
+    "client": "",
+    "slots": {
+      "homeTop": "",
+      "homeBottom": "",
+      "article": ""
+    }
+  }
+}
