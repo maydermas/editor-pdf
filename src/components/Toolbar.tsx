@@ -150,7 +150,7 @@ export function PropertiesBar({ tool, style, selected, onStyle, onDelete, onDupl
       <div className="propbar">
         <span className="hint">
           {tool === 'select'
-            ? 'Selecciona un elemento para moverlo o cambiar su tamaño. Doble clic para editar texto.'
+            ? 'Toca un elemento para moverlo o cambiar su tamaño. Arrastra la página para desplazarte; pellizca o Ctrl + rueda para ampliar.'
             : tool === 'whiteout'
               ? 'Arrastra sobre la zona que quieras tapar con blanco.'
               : 'Haz clic en la página para añadir una nota.'}
@@ -161,7 +161,7 @@ export function PropertiesBar({ tool, style, selected, onStyle, onDelete, onDupl
 
   return (
     <div className="propbar">
-      {tool === 'text' && !selected && <span className="hint">Pulsa un texto del documento para cambiarlo o borrarlo, o un hueco para escribir.</span>}
+      {tool === 'text' && !selected && <span className="hint">Pulsa un texto para cambiarlo o un hueco para escribir. Arrastra para mover la página.</span>}
       {showColor && (
         <div className="prop" role="radiogroup" aria-label="Color">
           {COLORS.map((c) => (

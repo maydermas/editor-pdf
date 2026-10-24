@@ -26,13 +26,22 @@ export interface PageApi {
   /** Cambia las anotaciones de una página; `record` guarda un paso de deshacer. */
   update: (pageId: string, fn: (anns: Annotation[]) => Annotation[], record: boolean) => void;
   onStampPlaced: () => void;
+  undo: () => void;
+  /** Cancela el gesto en curso de una página (lo usa el visor al detectar dos dedos). */
+  gestureAbort: { current: (() => void) | null };
 }
 
 type Gesture =
   | { kind: 'move'; id: string; x0: number; y0: number; start: Annotation; started: boolean }
   | { kind: 'resize'; id: string; x0: number; y0: number; start: Annotation; started: boolean }
   | { kind: 'endpoint'; id: string; end: 1 | 2; start: Annotation; started: boolean }
-  | { kind: 'create'; id: string; x0: number; y0: number };
+  | { kind: 'create'; id: string; x0: number; y0: number }
+  // Herramientas de «tocar para colocar»: si se arrastra, se mueve el documento en lugar de colocar.
+  | { kind: 'tap'; cx: number; cy: number; x: number; y: number; runKey: string | null; panning: boolean; sl: number; st: number };
+
+/** Herramientas que actúan al soltar sin arrastrar; arrastrar con ellas desplaza el documento. */
+const TAP_TOOLS: Tool[] = ['select', 'text', 'date', 'note', 'check', 'cross', 'dot', 'stamp'];
+const PAN_THRESHOLD = 6;
 
 const BOX_TOOLS: Tool[] = ['highlight', 'whiteout', 'rect', 'ellipse'];
 const DEFAULT_BOX: Record<string, [number, number]> = {
@@ -135,9 +144,23 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
     color: style.color,
   });
 
+  const viewer = () => wrapRef.current?.closest<HTMLElement>('.viewer') ?? null;
+
+  const startGesture = (g: Gesture) => {
+    gesture.current = g;
+    api.gestureAbort.current = () => {
+      const cur = gesture.current;
+      gesture.current = null;
+      api.gestureAbort.current = null;
+      // Deshace lo que el primer dedo ya hubiera empezado (un trazo, una forma, un movimiento).
+      if (cur && (cur.kind === 'create' || ('started' in cur && cur.started))) api.undo();
+    };
+  };
+
   const onBackgroundDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
-    if (api.editingId) {
+    const runKey = (e.target as HTMLElement).closest<HTMLElement>('.text-run')?.dataset.key ?? null;
+    if (api.editingId && !runKey) {
       // El primer clic fuera solo termina la edición en curso.
       api.setEditing(null);
       if (tool === 'text' || tool === 'select') return;
@@ -145,15 +168,32 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
     const [x, y] = clamp(...toLocal(e.clientX, e.clientY));
     const capture = () => (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 
+    if (TAP_TOOLS.includes(tool)) {
+      const v = viewer();
+      startGesture({ kind: 'tap', cx: e.clientX, cy: e.clientY, x, y, runKey, panning: false, sl: v?.scrollLeft ?? 0, st: v?.scrollTop ?? 0 });
+      capture();
+      e.preventDefault();
+      return;
+    }
+    placeAt(x, y);
+    if (gesture.current) capture();
+  };
+
+  /** Acción de la herramienta en un punto: colocar (tras un toque) o empezar a dibujar (al pulsar). */
+  const placeAt = (x: number, y: number, runKey: string | null = null) => {
     switch (tool) {
       case 'select':
         api.select(page.id, null);
         return;
       case 'text': {
+        const run = runKey ? runs.find((r) => r.key === runKey) : null;
+        if (run) {
+          editRun(run);
+          return;
+        }
         const t = newText(x, y);
         add(t);
         api.setEditing(t.id);
-        e.preventDefault();
         return;
       }
       case 'date':
@@ -163,7 +203,6 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
         const id = uid('note');
         add({ id, type: 'note', x: x - 4, y: y - 4, text: '', color: '#FFD84D' });
         api.setEditing(id);
-        e.preventDefault();
         return;
       }
       case 'check':
@@ -183,16 +222,14 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       case 'draw': {
         const id = uid('ink');
         add({ id, type: 'ink', points: [[x, y]], color: style.color, width: style.width });
-        gesture.current = { kind: 'create', id, x0: x, y0: y };
-        capture();
+        startGesture({ kind: 'create', id, x0: x, y0: y });
         return;
       }
       case 'line':
       case 'arrow': {
         const id = uid('ln');
         add({ id, type: tool, x1: x, y1: y, x2: x, y2: y, color: style.color, width: style.width });
-        gesture.current = { kind: 'create', id, x0: x, y0: y };
-        capture();
+        startGesture({ kind: 'create', id, x0: x, y0: y });
         return;
       }
       default:
@@ -200,8 +237,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
           const id = uid('box');
           const color = tool === 'highlight' ? (style.color === '#111827' ? '#FDE047' : style.color) : tool === 'whiteout' ? '#ffffff' : style.color;
           add({ id, type: tool as 'rect', x, y, w: 0, h: 0, color, width: style.width });
-          gesture.current = { kind: 'create', id, x0: x, y0: y };
-          capture();
+          startGesture({ kind: 'create', id, x0: x, y0: y });
         }
     }
   };
@@ -219,7 +255,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
       return;
     }
     const [x0, y0] = toLocal(e.clientX, e.clientY);
-    gesture.current = { kind: 'move', id: a.id, x0, y0, start: a, started: false };
+    startGesture({ kind: 'move', id: a.id, x0, y0, start: a, started: false });
     wrapRef.current!.querySelector<HTMLElement>('.page-overlay')!.setPointerCapture(e.pointerId);
   };
 
@@ -227,16 +263,29 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
     if (!selected) return;
     e.stopPropagation();
     const [x0, y0] = toLocal(e.clientX, e.clientY);
-    gesture.current =
+    startGesture(
       kind === 'resize'
         ? { kind: 'resize', id: selected.id, x0, y0, start: selected, started: false }
-        : { kind: 'endpoint', id: selected.id, end: kind, start: selected, started: false };
+        : { kind: 'endpoint', id: selected.id, end: kind, start: selected, started: false },
+    );
     wrapRef.current!.querySelector<HTMLElement>('.page-overlay')!.setPointerCapture(e.pointerId);
   };
 
   const onMove = (e: React.PointerEvent) => {
     const g = gesture.current;
     if (!g) return;
+    if (g.kind === 'tap') {
+      const dx = e.clientX - g.cx;
+      const dy = e.clientY - g.cy;
+      if (!g.panning && Math.hypot(dx, dy) < PAN_THRESHOLD) return;
+      g.panning = true;
+      const v = viewer();
+      if (v) {
+        v.scrollLeft = g.sl - dx;
+        v.scrollTop = g.st - dy;
+      }
+      return;
+    }
     const [x, y] = toLocal(e.clientX, e.clientY);
     if (g.kind !== 'create' && !g.started) {
       if (g.kind !== 'endpoint' && Math.hypot(x - g.x0, y - g.y0) * zoom < 3) return;
@@ -271,6 +320,11 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
   const onUp = () => {
     const g = gesture.current;
     gesture.current = null;
+    api.gestureAbort.current = null;
+    if (g?.kind === 'tap') {
+      if (!g.panning) placeAt(g.x, g.y, g.runKey);
+      return;
+    }
     if (!g || g.kind !== 'create') return;
     // Un clic sin arrastrar crea la forma con un tamaño por defecto.
     patch(g.id, (a) => {
@@ -303,7 +357,7 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
 
   const interactiveAnns = tool === 'select' || tool === 'text';
   const cursor =
-    tool === 'select' ? 'default' : tool === 'text' ? 'text' : tool === 'stamp' ? 'copy' : 'crosshair';
+    tool === 'select' ? 'grab' : tool === 'text' ? 'text' : tool === 'stamp' ? 'copy' : TAP_TOOLS.includes(tool) ? 'pointer' : 'crosshair';
 
   const box = selected ? bbox(selected) : null;
 
@@ -337,13 +391,15 @@ export function PageView({ page, number, api }: { page: Page; number: number; ap
                       <button
                         key={r.key}
                         className="text-run"
+                        data-key={r.key}
                         title="Editar este texto"
                         aria-label={`Editar texto: ${r.text}`}
                         style={{ left: b.x * zoom, top: b.y * zoom, width: b.w * zoom, height: b.h * zoom }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          editRun(r);
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            editRun(r);
+                          }
                         }}
                       />
                     );

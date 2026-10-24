@@ -13,6 +13,19 @@ import { ExportModal } from './ExportModal';
 import { Icon } from './Icon';
 import { Logo } from './Logo';
 
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 5;
+const clampZoom = (z: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+
+/** Punto de una página que debe quedarse bajo el ratón o los dedos al hacer zoom. */
+interface Anchor {
+  idx: number;
+  fx: number;
+  fy: number;
+  cx: number;
+  cy: number;
+}
+
 const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 
 const cloneAnn = (a: Annotation, offset = 0): Annotation => ({ ...translate(a, offset, offset), id: uid('ann') });
@@ -42,6 +55,13 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
   const mainRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const clipboard = useRef<Annotation | null>(null);
+  const gestureAbort = useRef<(() => void) | null>(null);
+  const anchor = useRef<Anchor | null>(null);
+  const [anchorTick, setAnchorTick] = useState(0);
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist0: number; zoom0: number } | null>(null);
+  const dragPan = useRef<{ x: number; y: number; sl: number; st: number; id: number } | null>(null);
+  const [spaceHeld, setSpaceHeld] = useState(false);
   const dirty = history.canUndo;
 
   const notify = useCallback((msg: string) => {
@@ -142,23 +162,171 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
     setCurrent(idx);
   };
 
-  const stepZoom = (dir: 1 | -1) =>
-    setZoom((z) => {
-      if (dir > 0) return ZOOMS.find((v) => v > z + 0.001) ?? z;
-      return [...ZOOMS].reverse().find((v) => v < z - 0.001) ?? z;
+  /** Guarda qué punto de qué página hay bajo (cx, cy) para mantenerlo ahí tras el zoom. */
+  const setAnchorAt = (cx: number, cy: number) => {
+    const wraps = mainRef.current?.querySelectorAll<HTMLElement>('.page-wrap');
+    if (!wraps?.length) return;
+    let best = 0;
+    let bestDist = Infinity;
+    wraps.forEach((w, i) => {
+      const r = w.getBoundingClientRect();
+      const d = cy < r.top ? r.top - cy : cy > r.bottom ? cy - r.bottom : 0;
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
     });
+    const r = wraps[best].getBoundingClientRect();
+    anchor.current = { idx: best, fx: (cx - r.left) / r.width, fy: (cy - r.top) / r.height, cx, cy };
+  };
 
-  // Ctrl/⌘ + rueda para hacer zoom.
+  // Tras cada cambio de zoom (o de posición de los dedos), recoloca el scroll para que el punto anclado no se mueva.
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    const v = mainRef.current;
+    if (!a || !v) return;
+    const w = v.querySelectorAll<HTMLElement>('.page-wrap')[a.idx];
+    if (!w) return;
+    const r = w.getBoundingClientRect();
+    v.scrollLeft += r.left + a.fx * r.width - a.cx;
+    v.scrollTop += r.top + a.fy * r.height - a.cy;
+    if (!pinch.current) anchor.current = null;
+  }, [zoom, anchorTick]);
+
+  /** Zoom manteniendo fijo el punto (cx, cy); sin punto, el centro del visor. */
+  const zoomTo = (next: number, cx?: number, cy?: number) => {
+    const v = mainRef.current;
+    if (v) {
+      const r = v.getBoundingClientRect();
+      setAnchorAt(cx ?? r.left + r.width / 2, cy ?? r.top + r.height / 2);
+    }
+    setZoom(clampZoom(next));
+  };
+
+  const stepZoom = (dir: 1 | -1) => {
+    const next = dir > 0 ? ZOOMS.find((v) => v > zoom + 0.001) : [...ZOOMS].reverse().find((v) => v < zoom - 0.001);
+    if (next) zoomTo(next);
+  };
+
+  // Ctrl/⌘ + rueda (y el pellizco del trackpad, que llega igual) hace zoom donde está el ratón.
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
   useEffect(() => {
     const el = mainRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
-      setZoom((z) => Math.max(0.25, Math.min(4, z * (e.deltaY < 0 ? 1.1 : 1 / 1.1))));
+      const factor = Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025));
+      zoomToRef.current(zoomRef.current * factor, e.clientX, e.clientY);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+  const zoomToRef = useRef(zoomTo);
+  zoomToRef.current = zoomTo;
+
+  // --- Dos dedos (mover y pellizcar), botón central o espacio + arrastrar (mover) ---
+  const center = () => {
+    const pts = [...touches.current.values()];
+    return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2, d: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) };
+  };
+
+  const onViewerPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.current.size >= 2) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (!pinch.current) {
+          dragPan.current = null;
+          gestureAbort.current?.();
+          const c = center();
+          pinch.current = { dist0: Math.max(c.d, 1), zoom0: zoomRef.current };
+          setAnchorAt(c.x, c.y);
+        }
+      }
+      if (touches.current.size === 1 && e.target === e.currentTarget) {
+        const v = mainRef.current!;
+        dragPan.current = { x: e.clientX, y: e.clientY, sl: v.scrollLeft, st: v.scrollTop, id: e.pointerId };
+      }
+      return;
+    }
+    // Botón central, espacio + arrastrar, o arrastrar en el hueco gris entre páginas.
+    if (e.button === 1 || (e.button === 0 && (spaceHeld || e.target === e.currentTarget))) {
+      e.stopPropagation();
+      e.preventDefault();
+      const v = mainRef.current!;
+      dragPan.current = { x: e.clientX, y: e.clientY, sl: v.scrollLeft, st: v.scrollTop, id: e.pointerId };
+      v.setPointerCapture(e.pointerId);
+    }
+  };
+
+  const onViewerPointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch' && touches.current.has(e.pointerId)) {
+      touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const d = dragPan.current;
+      if (d && d.id === e.pointerId && !pinch.current) {
+        mainRef.current!.scrollLeft = d.sl - (e.clientX - d.x);
+        mainRef.current!.scrollTop = d.st - (e.clientY - d.y);
+        return;
+      }
+      if (pinch.current && touches.current.size >= 2) {
+        e.stopPropagation();
+        const c = center();
+        if (anchor.current) {
+          anchor.current.cx = c.x;
+          anchor.current.cy = c.y;
+        }
+        const next = clampZoom(pinch.current.zoom0 * (c.d / pinch.current.dist0));
+        if (Math.abs(next - zoomRef.current) > 0.001) setZoom(next);
+        setAnchorTick((t) => t + 1);
+      }
+      return;
+    }
+    const d = dragPan.current;
+    if (d && d.id === e.pointerId) {
+      e.stopPropagation();
+      mainRef.current!.scrollLeft = d.sl - (e.clientX - d.x);
+      mainRef.current!.scrollTop = d.st - (e.clientY - d.y);
+    }
+  };
+
+  const onViewerPointerUp = (e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      touches.current.delete(e.pointerId);
+      if (dragPan.current?.id === e.pointerId) dragPan.current = null;
+      if (pinch.current) {
+        e.stopPropagation();
+        if (touches.current.size < 2) {
+          // Un último ajuste con la posición final de los dedos; después se suelta el ancla.
+          pinch.current = null;
+          setAnchorTick((t) => t + 1);
+        }
+      }
+      return;
+    }
+    if (dragPan.current?.id === e.pointerId) {
+      e.stopPropagation();
+      dragPan.current = null;
+    }
+  };
+
+  useEffect(() => {
+    const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable]');
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !isTyping(e.target)) {
+        e.preventDefault();
+        setSpaceHeld(true);
+      }
+    };
+    const up = (e: KeyboardEvent) => e.code === 'Space' && setSpaceHeld(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
   }, []);
 
   // --- Operaciones de página ---
@@ -298,6 +466,8 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
       setStamp(null);
       setTool('select');
     },
+    undo: history.undo,
+    gestureAbort,
   };
 
   return (
@@ -372,7 +542,15 @@ export function Editor({ initialPages, fileName: initialName, intent, onExit }: 
             onInsertFiles={insertFiles}
           />
         )}
-        <main className="viewer" ref={mainRef} onScroll={onScroll}>
+        <main
+          className={`viewer${spaceHeld ? ' is-panning' : ''}`}
+          ref={mainRef}
+          onScroll={onScroll}
+          onPointerDownCapture={onViewerPointerDown}
+          onPointerMoveCapture={onViewerPointerMove}
+          onPointerUpCapture={onViewerPointerUp}
+          onPointerCancelCapture={onViewerPointerUp}
+        >
           {pages.map((p, i) => (
             <PageView key={p.id} page={p} number={i + 1} api={api} />
           ))}
